@@ -84,7 +84,6 @@ const mockPapersByYear: Record<number, Paper[]> = {
 };
 
 const Career: React.FC = () => {
-  const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [expandedYear, setExpandedYear] = useState<number | null>(2024);
 
   const totalReward = mockCareerRecords.reduce((sum, r) => sum + r.totalReward, 0);

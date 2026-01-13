@@ -8,11 +8,9 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  Filter,
   Download,
 } from 'lucide-react';
-import PaperGallery from '../components/PaperGallery';
-import type { Paper, PaperApplication } from '../types';
+import type { Paper, PaperApplication, ApplicantType, ApplicationStatus } from '../types';
 
 // Mock data
 const mockPapers: Paper[] = [
@@ -65,8 +63,8 @@ const mockApplications: PaperApplication[] = [
     id: 'app1',
     paperId: '1',
     applicantId: 'user1',
-    applicantType: 'first_author',
-    status: 'approved',
+    applicantType: 'first_author' as ApplicantType,
+    status: 'approved' as ApplicationStatus,
     rewardAmount: 85000,
     submittedAt: '2024-03-20',
     reviewedAt: '2024-03-25',
@@ -78,8 +76,8 @@ const mockApplications: PaperApplication[] = [
     id: 'app2',
     paperId: '2',
     applicantId: 'user1',
-    applicantType: 'first_author',
-    status: 'pending',
+    applicantType: 'first_author' as ApplicantType,
+    status: 'pending' as ApplicationStatus,
     rewardAmount: 32000,
     submittedAt: '2024-03-01',
     createdAt: '2024-03-01',
@@ -87,7 +85,7 @@ const mockApplications: PaperApplication[] = [
   },
 ];
 
-const statusConfig = {
+const statusConfig: Record<ApplicationStatus, { label: string; color: string; icon: React.ElementType }> = {
   pending: {
     label: '審核中',
     color: 'bg-amber-100 text-amber-700',
@@ -112,17 +110,11 @@ const statusConfig = {
 
 const MyPapers: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
-  const [viewMode, setViewMode] = useState<'applications' | 'papers'>('applications');
 
   const filteredApplications = mockApplications.filter((app) => {
     if (activeTab === 'all') return true;
     return app.status === activeTab;
   });
-
-  const rewards = mockApplications.reduce((acc, app) => {
-    acc[app.paperId] = app.rewardAmount || 0;
-    return acc;
-  }, {} as Record<string, number>);
 
   const stats = {
     total: mockApplications.length,

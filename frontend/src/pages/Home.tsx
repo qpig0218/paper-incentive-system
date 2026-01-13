@@ -131,10 +131,10 @@ const mockStats: DashboardStats = {
 };
 
 const Home: React.FC = () => {
-  const [papers, setPapers] = useState<Paper[]>(mockPapers);
+  const [papers] = useState<Paper[]>(mockPapers);
   const [announcements] = useState<Announcement[]>(mockAnnouncements);
   const [stats] = useState<DashboardStats>(mockStats);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading] = useState(false);
 
   // In production, fetch from API
   useEffect(() => {
@@ -225,7 +225,7 @@ const Home: React.FC = () => {
             transition={{ duration: 0.5, delay: 0.4 }}
             className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-12"
           >
-            {statCards.map((stat, index) => (
+            {statCards.map((stat) => (
               <div
                 key={stat.label}
                 className="glass-card p-6 text-center"

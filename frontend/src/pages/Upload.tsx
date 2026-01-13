@@ -10,7 +10,6 @@ import {
   Award,
   Save,
   Brain,
-  Loader2,
   AlertTriangle,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -44,7 +43,6 @@ const paperTypeLabels: Record<PaperType, string> = {
 
 const Upload: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<Step>('upload');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AIAnalysisResult | null>(null);
 
@@ -77,11 +75,11 @@ const Upload: React.FC = () => {
     totalAmount: 0,
   });
 
-  const handleFileSelect = (file: File) => {
-    setSelectedFile(file);
+  const handleFileSelect = (_file: File) => {
+    // File selected, ready for analysis
   };
 
-  const handleAnalyze = async (file: File) => {
+  const handleAnalyze = async (_file: File) => {
     setIsAnalyzing(true);
 
     // Simulate AI analysis

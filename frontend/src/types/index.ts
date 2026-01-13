@@ -19,11 +19,11 @@ export type ConferenceLevel = 'international' | 'national';
 
 export type PresentationType = 'poster' | 'oral';
 
-export type AuthorRole = 'first' | 'corresponding' | 'co_first' | 'co_corresponding' | 'other';
+export type AuthorRole = 'first' | 'corresponding' | 'co_first' | 'co_corresponding' | 'second' | 'third_to_sixth' | 'other';
 
-export type ApplicantType = 'attending_physician' | 'medical_staff' | 'administrative';
+export type ApplicantType = 'first_author' | 'corresponding' | 'co_author';
 
-export type ApplicationStatus = 'draft' | 'submitted' | 'reviewing' | 'approved' | 'rejected' | 'paid';
+export type ApplicationStatus = 'pending' | 'approved' | 'rejected' | 'revision';
 
 export interface Author {
   id: string;
@@ -97,18 +97,15 @@ export interface RewardCalculation {
 export interface PaperApplication {
   id: string;
   paperId: string;
-  paper: Paper;
   applicantId: string;
-  applicantName: string;
   applicantType: ApplicantType;
-  authorRole: AuthorRole;
   status: ApplicationStatus;
+  rewardAmount?: number;
   rewardCalculation?: RewardCalculation;
-  submittedAt?: string;
+  submittedAt: string;
   reviewedAt?: string;
   reviewedBy?: string;
-  reviewNotes?: string;
-  paidAt?: string;
+  reviewComment?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -142,7 +139,6 @@ export interface User {
   email: string;
   department: string;
   position: string;
-  userType: ApplicantType;
   avatar?: string;
 }
 

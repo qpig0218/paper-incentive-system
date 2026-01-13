@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import {
   LayoutDashboard,
   FileText,
@@ -14,23 +13,27 @@ import {
   Eye,
   Download,
   Search,
-  Filter,
   ChevronRight,
   Plus,
   Edit2,
   Trash2,
 } from 'lucide-react';
-import type { PaperApplication, Paper, Announcement } from '../types';
+import type { PaperApplication, Paper, Announcement, ApplicantType, ApplicationStatus } from '../types';
 
 // Mock data
-const mockApplications: (PaperApplication & { paper: Paper; applicantName: string })[] = [
+interface AdminApplication extends PaperApplication {
+  paper: Paper;
+  applicantName: string;
+}
+
+const mockApplications: AdminApplication[] = [
   {
     id: 'app1',
     paperId: '1',
     applicantId: 'user1',
     applicantName: '王大明',
-    applicantType: 'first_author',
-    status: 'pending',
+    applicantType: 'first_author' as ApplicantType,
+    status: 'pending' as ApplicationStatus,
     rewardAmount: 85000,
     submittedAt: '2024-03-20',
     createdAt: '2024-03-20',
@@ -51,8 +54,8 @@ const mockApplications: (PaperApplication & { paper: Paper; applicantName: strin
     paperId: '2',
     applicantId: 'user2',
     applicantName: '陳醫師',
-    applicantType: 'corresponding',
-    status: 'pending',
+    applicantType: 'corresponding' as ApplicantType,
+    status: 'pending' as ApplicationStatus,
     rewardAmount: 42000,
     submittedAt: '2024-03-18',
     createdAt: '2024-03-18',
@@ -274,7 +277,7 @@ const AdminApplications: React.FC = () => {
 
 // Announcements Management
 const AdminAnnouncements: React.FC = () => {
-  const [announcements, setAnnouncements] = useState(mockAnnouncements);
+  const [announcements] = useState(mockAnnouncements);
 
   const typeColors = {
     info: 'bg-blue-100 text-blue-700',

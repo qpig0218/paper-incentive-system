@@ -1,0 +1,249 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  password    String
+  name        String
+  employeeId  String?  @unique
+  department  String?
+  position    String?
+  phone       String?
+  role        UserRole @default(USER)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  papers       Paper[]
+  applications PaperApplication[]
+  reviews      PaperApplication[] @relation("Reviewer")
+
+  @@map("users")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  REVIEWER
+}
+
+// Paper model
+model Paper {
+  id              String    @id @default(uuid())
+  title           String
+  titleChinese    String?
+  paperType       PaperType
+  publicationDate DateTime?
+  volume          String?
+  issue           String?
+  pages           String?
+  doi             String?   @unique
+  pmid            String?
+  pdfUrl          String?
+  pdfFilename     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  authors       Author[]
+  journalInfo   JournalInfo?
+  conferenceInfo ConferenceInfo?
+  applications  PaperApplication[]
+  submittedBy   User?              @relation(fields: [submittedById], references: [id])
+  submittedById String?
+
+  @@map("papers")
+}
+
+enum PaperType {
+  ORIGINAL
+  CASE_REPORT
+  REVIEW
+  LETTER
+  NOTE
+  COMMUNICATION
+  IMAGE
+  ABSTRACT_POSTER
+  ABSTRACT_ORAL
+  COMMENT
+  BOOK_CHAPTER
+  TRANSLATION
+}
+
+// Author model
+model Author {
+  id              String  @id @default(uuid())
+  name            String
+  email           String?
+  affiliation     String
+  department      String?
+  isFirst         Boolean @default(false)
+  isCorresponding Boolean @default(false)
+  order           Int
+
+  // Relations
+  paper   Paper  @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  paperId String
+
+  @@map("authors")
+}
+
+// Journal Information
+model JournalInfo {
+  id           String   @id @default(uuid())
+  name         String
+  abbreviation String?
+  issn         String?
+  isSci        Boolean  @default(false)
+  isSsci       Boolean  @default(false)
+  impactFactor Float?
+  quartile     Quartile?
+  ranking      Int?
+  totalInField Int?
+  category     String?
+
+  // Relations
+  paper   Paper  @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  paperId String @unique
+
+  @@map("journal_info")
+}
+
+enum Quartile {
+  Q1
+  Q2
+  Q3
+  Q4
+}
+
+// Conference Information
+model ConferenceInfo {
+  id               String           @id @default(uuid())
+  name             String
+  location         String?
+  date             DateTime?
+  type             ConferenceType
+  presentationType PresentationType
+
+  // Relations
+  paper   Paper  @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  paperId String @unique
+
+  @@map("conference_info")
+}
+
+enum ConferenceType {
+  INTERNATIONAL
+  DOMESTIC
+}
+
+enum PresentationType {
+  ORAL
+  POSTER
+}
+
+// Paper Application model
+model PaperApplication {
+  id              String            @id @default(uuid())
+  applicantType   ApplicantType
+  status          ApplicationStatus @default(PENDING)
+  rewardAmount    Float?
+  rewardFormula   String?
+  submittedAt     DateTime          @default(now())
+  reviewedAt      DateTime?
+  reviewComment   String?
+
+  // Theme analysis
+  hasHolisticCare    Boolean @default(false)
+  hasMedicalQuality  Boolean @default(false)
+  hasMedicalEducation Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  paper       Paper   @relation(fields: [paperId], references: [id])
+  paperId     String
+  applicant   User    @relation(fields: [applicantId], references: [id])
+  applicantId String
+  reviewer    User?   @relation("Reviewer", fields: [reviewerId], references: [id])
+  reviewerId  String?
+
+  @@map("paper_applications")
+}
+
+enum ApplicantType {
+  FIRST_AUTHOR
+  CORRESPONDING
+  CO_AUTHOR
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVISION
+}
+
+// Announcement model
+model Announcement {
+  id        String           @id @default(uuid())
+  title     String
+  content   String
+  type      AnnouncementType
+  isActive  Boolean          @default(true)
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@map("announcements")
+}
+
+enum AnnouncementType {
+  INFO
+  SUCCESS
+  WARNING
+  URGENT
+}
+
+// Career Record for tracking yearly summaries
+model CareerRecord {
+  id               String   @id @default(uuid())
+  userId           String
+  year             Int
+  totalReward      Float    @default(0)
+  sciPaperCount    Int      @default(0)
+  nonSciPaperCount Int      @default(0)
+  conferenceCount  Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, year])
+  @@map("career_records")
+}
+
+// AI Analysis Log for tracking AI usage
+model AIAnalysisLog {
+  id           String   @id @default(uuid())
+  paperId      String?
+  userId       String
+  analysisType String
+  inputData    Json?
+  outputData   Json?
+  confidence   Float?
+  createdAt    DateTime @default(now())
+
+  @@map("ai_analysis_logs")
+}

@@ -10,21 +10,56 @@ import {
   Microscope,
   MessageSquare,
   Image as ImageIcon,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
 } from 'lucide-react';
-import type { Paper, PaperType } from '../types';
+import type { Paper, PaperType, ApplicationStatus } from '../types';
 
 interface PaperCardProps {
   paper: Paper;
   onClick?: () => void;
   showReward?: boolean;
   rewardAmount?: number;
+  applicationStatus?: ApplicationStatus;
+  submittedAt?: string;
 }
+
+const statusConfig: Record<ApplicationStatus, { label: string; color: string; bgColor: string; icon: React.ElementType }> = {
+  pending: {
+    label: '審核中',
+    color: 'text-amber-700',
+    bgColor: 'bg-amber-100',
+    icon: Clock,
+  },
+  approved: {
+    label: '已核准',
+    color: 'text-emerald-700',
+    bgColor: 'bg-emerald-100',
+    icon: CheckCircle,
+  },
+  rejected: {
+    label: '已退件',
+    color: 'text-red-700',
+    bgColor: 'bg-red-100',
+    icon: XCircle,
+  },
+  revision: {
+    label: '需修改',
+    color: 'text-blue-700',
+    bgColor: 'bg-blue-100',
+    icon: AlertCircle,
+  },
+};
 
 const PaperCard: React.FC<PaperCardProps> = ({
   paper,
   onClick,
   showReward = false,
   rewardAmount,
+  applicationStatus,
+  submittedAt: _submittedAt,
 }) => {
   const getPaperTypeInfo = (type: PaperType) => {
     const types: Record<PaperType, { label: string; icon: React.ElementType; color: string }> = {
@@ -109,6 +144,22 @@ const PaperCard: React.FC<PaperCardProps> = ({
             {getImpactFactorBadge()}
           </div>
         )}
+
+        {/* Application Status badge */}
+        {applicationStatus && (
+          <div className="absolute bottom-3 right-3">
+            {(() => {
+              const status = statusConfig[applicationStatus];
+              const StatusIcon = status.icon;
+              return (
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${status.bgColor} ${status.color}`}>
+                  <StatusIcon className="w-3 h-3" strokeWidth={2} />
+                  {status.label}
+                </span>
+              );
+            })()}
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -120,20 +171,20 @@ const PaperCard: React.FC<PaperCardProps> = ({
 
         {/* Chinese title if exists */}
         {paper.titleChinese && (
-          <p className="text-sm text-slate-600 line-clamp-1">
+          <p className="text-sm text-slate-700 line-clamp-1">
             {paper.titleChinese}
           </p>
         )}
 
         {/* Authors */}
-        <div className="flex items-center gap-2 text-sm text-slate-500">
+        <div className="flex items-center gap-2 text-sm text-slate-700">
           <Users className="w-4 h-4 flex-shrink-0" />
           <span className="truncate">{formatAuthors(paper.authors)}</span>
         </div>
 
         {/* Journal / Conference */}
         {paper.journalInfo && (
-          <div className="flex items-center gap-2 text-sm text-slate-500">
+          <div className="flex items-center gap-2 text-sm text-slate-700">
             <BookOpen className="w-4 h-4 flex-shrink-0" />
             <span className="truncate">
               {paper.journalInfo.name}
@@ -153,7 +204,7 @@ const PaperCard: React.FC<PaperCardProps> = ({
 
         {/* Date */}
         {paper.publicationDate && (
-          <div className="flex items-center gap-2 text-sm text-slate-400">
+          <div className="flex items-center gap-2 text-sm text-slate-600">
             <Calendar className="w-4 h-4" />
             <span>{new Date(paper.publicationDate).toLocaleDateString('zh-TW')}</span>
           </div>

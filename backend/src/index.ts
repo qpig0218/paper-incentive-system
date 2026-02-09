@@ -13,6 +13,7 @@ import applicationRoutes from './routes/applications.js';
 import userRoutes from './routes/users.js';
 import announcementRoutes from './routes/announcements.js';
 import aiRoutes from './routes/ai.js';
+import gamificationRoutes from './routes/gamification.js';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler.js';
@@ -40,6 +41,7 @@ app.use('/api/applications', applicationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/gamification', gamificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

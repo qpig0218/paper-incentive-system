@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -9,10 +9,28 @@ import {
   Users,
   ArrowRight,
   Sparkles,
+  Search,
+  Trophy,
+  Zap,
 } from 'lucide-react';
 import Marquee from '../components/Marquee';
 import PaperGallery from '../components/PaperGallery';
+import {
+  MissionBoard,
+  Leaderboard,
+  ChallengeCard,
+  StreakTracker,
+  LevelProgress,
+} from '../components/gamification';
 import type { Paper, Announcement, DashboardStats } from '../types';
+import type {
+  LeaderboardEntry,
+  LeaderboardType,
+  Challenge,
+  Streak,
+  HospitalStats,
+  UserLevelProgress,
+} from '../types/gamification';
 
 // Mock data for demonstration
 const mockAnnouncements: Announcement[] = [
@@ -130,17 +148,122 @@ const mockStats: DashboardStats = {
   ],
 };
 
+// Mock gamification data
+const mockLeaderboardData: LeaderboardEntry[] = [
+  { rank: 1, userId: '2', name: '王大明', department: '心臟內科', value: 15, change: 0 },
+  { rank: 2, userId: '3', name: '陳醫師', department: '神經內科', value: 12, change: 1 },
+  { rank: 3, userId: '4', name: '李小華', department: '胸腔內科', value: 10, change: -1 },
+  { rank: 4, userId: '5', name: '張主任', department: '急診醫學部', value: 9, change: 2 },
+  { rank: 5, userId: '6', name: '林護理長', department: '護理部', value: 8, change: 0 },
+];
+
+const mockChallenges: Challenge[] = [
+  {
+    id: '1',
+    title: '年度衝刺月',
+    description: '在 12 月份提交論文申請，獎勵金額加成 10%',
+    startDate: '2024-12-01',
+    endDate: '2024-12-31',
+    targetType: 'paper_count',
+    targetValue: 1,
+    bonusRate: 0.1,
+    isActive: true,
+    participantCount: 45,
+  },
+  {
+    id: '2',
+    title: '醫學教育推廣週',
+    description: '發表醫學教育相關論文，獎勵加成 20%',
+    startDate: '2024-12-15',
+    endDate: '2024-12-31',
+    targetType: 'paper_count',
+    targetValue: 1,
+    bonusRate: 0.2,
+    isActive: true,
+    participantCount: 23,
+  },
+];
+
+const mockStreaks: Streak[] = [
+  { id: '1', userId: '2', type: 'yearly_publication', count: 5, lastDate: '2024-12-15', bestCount: 5 },
+];
+
+const mockHospitalStats: HospitalStats = {
+  yearlyGoal: {
+    sciPapers: { target: 200, current: 156 },
+    totalPapers: { target: 350, current: 289 },
+    totalRewards: { target: 15000000, current: 12500000 },
+  },
+  milestones: [
+    { id: '1', title: '100 篇 SCI 論文', target: 100, current: 156, isReached: true, reachedAt: '2024-08-15' },
+    { id: '2', title: '150 篇 SCI 論文', target: 150, current: 156, isReached: true, reachedAt: '2024-11-20' },
+    { id: '3', title: '200 篇 SCI 論文', target: 200, current: 156, isReached: false },
+  ],
+  departmentContributions: [],
+  recentAchievements: [
+    {
+      userName: '王大明',
+      department: '心臟內科',
+      achievement: {
+        id: '5',
+        name: '高影響力',
+        nameEn: 'High Impact',
+        description: '發表 IF≥10 的論文',
+        icon: '💥',
+        category: 'impact',
+        tier: 'gold',
+        requirement: { type: 'impact_factor', value: 10, comparison: 'gte' },
+        isHidden: false,
+        createdAt: '2024-01-01',
+      },
+      unlockedAt: '2024-12-18T10:30:00',
+    },
+  ],
+};
+
+const mockLevelProgress: UserLevelProgress = {
+  userId: '2',
+  currentLevel: {
+    level: 5,
+    title: '學術大師',
+    titleEn: 'Master',
+    minPoints: 1000,
+    maxPoints: 1999,
+    benefits: ['專屬頭銜顯示'],
+    icon: '🎓',
+    color: 'from-amber-400 to-amber-500',
+  },
+  nextLevel: {
+    level: 6,
+    title: '學術導師',
+    titleEn: 'Mentor',
+    minPoints: 2000,
+    maxPoints: 3999,
+    benefits: ['指導新進人員'],
+    icon: '👨‍🏫',
+    color: 'from-rose-400 to-rose-500',
+  },
+  totalPoints: 1250,
+  pointsToNextLevel: 750,
+  progressPercentage: 25,
+};
+
+// Paper categories
+const paperCategories = [
+  { id: 'sci', label: 'SCI/SSCI', icon: '🔬', color: 'from-blue-500 to-cyan-500' },
+  { id: 'domestic', label: '國內期刊', icon: '📚', color: 'from-emerald-500 to-teal-500' },
+  { id: 'conference', label: '會議論文', icon: '🎤', color: 'from-purple-500 to-violet-500' },
+  { id: 'special', label: '特色主題', icon: '⭐', color: 'from-amber-500 to-orange-500' },
+];
+
 const Home: React.FC = () => {
   const [papers] = useState<Paper[]>(mockPapers);
   const [announcements] = useState<Announcement[]>(mockAnnouncements);
   const [stats] = useState<DashboardStats>(mockStats);
   const [isLoading] = useState(false);
-
-  // In production, fetch from API
-  useEffect(() => {
-    // paperApi.getAll().then(data => setPapers(data.papers));
-    // announcementApi.getActive().then(setAnnouncements);
-  }, []);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [leaderboardType, setLeaderboardType] = useState<LeaderboardType>('monthly_papers');
 
   const statCards = [
     {
@@ -169,13 +292,18 @@ const Home: React.FC = () => {
     },
   ];
 
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log('Search:', searchQuery);
+  };
+
   return (
     <div className="min-h-screen">
       {/* Marquee Announcements */}
       <Marquee announcements={announcements} />
 
       {/* Hero Section */}
-      <section className="relative py-16 px-4 overflow-hidden">
+      <section className="relative py-12 px-4 overflow-hidden">
         {/* Background decoration */}
         <div className="absolute inset-0 -z-10">
           <div className="absolute top-20 left-10 w-72 h-72 bg-primary-200 rounded-full blur-3xl opacity-30" />
@@ -183,20 +311,20 @@ const Home: React.FC = () => {
         </div>
 
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
+          <div className="text-center mb-8">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              <span className="inline-flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-medium mb-4">
-                <Sparkles className="w-4 h-4" />
+              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium mb-4" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#4f46e5' }}>
+                <Sparkles className="w-4 h-4" strokeWidth={1.5} />
                 AI 驅動的智慧論文管理
               </span>
               <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-4">
                 論文發表獎勵系統
               </h1>
-              <p className="text-xl text-slate-600 max-w-2xl mx-auto">
+              <p className="text-xl text-slate-700 max-w-2xl mx-auto">
                 自動辨識論文類型、計算獎勵金額，讓您的學術成就獲得應有的肯定
               </p>
             </motion.div>
@@ -208,12 +336,12 @@ const Home: React.FC = () => {
               className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8"
             >
               <Link to="/upload" className="btn-primary flex items-center gap-2">
-                <Upload className="w-5 h-5" />
+                <Upload className="w-5 h-5" strokeWidth={1.5} />
                 上傳論文申請獎勵
               </Link>
               <Link to="/my-papers" className="btn-secondary flex items-center gap-2">
                 查看我的論文
-                <ArrowRight className="w-5 h-5" />
+                <ArrowRight className="w-5 h-5" strokeWidth={1.5} />
               </Link>
             </motion.div>
           </div>
@@ -223,46 +351,213 @@ const Home: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.4 }}
-            className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-12"
+            className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
           >
-            {statCards.map((stat) => (
-              <div
+            {statCards.map((stat, index) => (
+              <motion.div
                 key={stat.label}
-                className="glass-card p-6 text-center"
+                className="liquid-glass-hover p-6 text-center"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 + index * 0.1 }}
               >
-                <div className={`w-12 h-12 bg-gradient-to-br ${stat.color} rounded-xl flex items-center justify-center mx-auto mb-3`}>
-                  <stat.icon className="w-6 h-6 text-white" />
+                <div className={`w-12 h-12 bg-gradient-to-br ${stat.color} rounded-xl flex items-center justify-center mx-auto mb-3 shadow-lg`}>
+                  <stat.icon className="w-6 h-6 text-white" strokeWidth={1.5} />
                 </div>
-                <p className="text-2xl font-bold text-slate-800">{stat.value}</p>
-                <p className="text-sm text-slate-500">{stat.label}</p>
-              </div>
+                <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
+                <p className="text-sm text-slate-700">{stat.label}</p>
+              </motion.div>
             ))}
+          </motion.div>
+
+          {/* Level Progress (User's gamification status) */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.6 }}
+            className="mb-8"
+          >
+            <LevelProgress levelProgress={mockLevelProgress} compact />
           </motion.div>
         </div>
       </section>
 
-      {/* Recent Papers Gallery */}
-      <section className="py-12 px-4">
+      {/* Search Section */}
+      <section className="py-8 px-4">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-800">最新發表論文</h2>
-              <p className="text-slate-500 mt-1">瀏覽院內同仁最新學術成果</p>
-            </div>
-            <Link
-              to="/papers"
-              className="text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
-            >
-              查看全部
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.7 }}
+            className="glass-card p-6"
+          >
+            <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Search className="w-5 h-5 text-primary-500" />
+              院內著作搜尋
+            </h2>
 
-          <PaperGallery
-            papers={papers}
-            isLoading={isLoading}
-            onPaperClick={(paper) => console.log('Paper clicked:', paper)}
-          />
+            <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="搜尋作者姓名、部門、論文標題、關鍵字..."
+                  className="input-field pl-12"
+                />
+              </div>
+              <button type="submit" className="btn-primary flex items-center gap-2">
+                <Search className="w-4 h-4" />
+                搜尋
+              </button>
+            </form>
+
+            {/* Category Filters */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedCategory(null)}
+                className={`
+                  px-4 py-2 rounded-xl text-sm font-medium transition-all
+                  ${selectedCategory === null
+                    ? 'bg-primary-500 text-white shadow-lg'
+                    : 'bg-slate-100/80 text-slate-700 hover:bg-slate-200/80'
+                  }
+                `}
+              >
+                全部
+              </button>
+              {paperCategories.map((cat) => (
+                <motion.button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`
+                    px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2
+                    ${selectedCategory === cat.id
+                      ? `bg-gradient-to-r ${cat.color} text-white shadow-lg`
+                      : 'bg-slate-100/80 text-slate-700 hover:bg-slate-200/80'
+                    }
+                  `}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <span>{cat.icon}</span>
+                  {cat.label}
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Main Content Grid */}
+      <section className="py-8 px-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid lg:grid-cols-3 gap-8">
+            {/* Left Column - Papers & Mission */}
+            <div className="lg:col-span-2 space-y-8">
+              {/* Recent Papers Gallery */}
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                      <FileText className="w-6 h-6 text-primary-500" />
+                      最新發表論文
+                    </h2>
+                    <p className="text-slate-700 mt-1">瀏覽院內同仁最新學術成果</p>
+                  </div>
+                  <Link
+                    to="/papers"
+                    className="text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                  >
+                    查看全部
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+
+                <PaperGallery
+                  papers={papers}
+                  isLoading={isLoading}
+                  onPaperClick={(paper) => console.log('Paper clicked:', paper)}
+                />
+              </div>
+
+              {/* Challenges Section */}
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-amber-500" />
+                  進行中的挑戰
+                </h2>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {mockChallenges.map((challenge) => (
+                    <ChallengeCard
+                      key={challenge.id}
+                      challenge={challenge}
+                      onJoin={(id) => console.log('Join challenge:', id)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Mission Board */}
+              <MissionBoard stats={mockHospitalStats} />
+            </div>
+
+            {/* Right Column - Gamification */}
+            <div className="space-y-6">
+              {/* Streak Tracker */}
+              <StreakTracker streaks={mockStreaks} compact />
+
+              {/* Leaderboard */}
+              <Leaderboard
+                entries={mockLeaderboardData}
+                type={leaderboardType}
+                currentUserId="2"
+                onTypeChange={setLeaderboardType}
+                showTypeSelector
+              />
+
+              {/* Quick Links */}
+              <div className="glass-card p-4">
+                <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-amber-500" />
+                  快速連結
+                </h3>
+                <div className="space-y-2">
+                  <Link
+                    to="/achievements"
+                    className="flex items-center justify-between p-3 rounded-xl bg-slate-100/80 hover:bg-slate-200/80 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🏅</span>
+                      <span className="font-medium text-slate-800">成就收藏館</span>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-slate-500" />
+                  </Link>
+                  <Link
+                    to="/leaderboard"
+                    className="flex items-center justify-between p-3 rounded-xl bg-slate-100/80 hover:bg-slate-200/80 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🏆</span>
+                      <span className="font-medium text-slate-800">完整排行榜</span>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-slate-500" />
+                  </Link>
+                  <Link
+                    to="/career"
+                    className="flex items-center justify-between p-3 rounded-xl bg-slate-100/80 hover:bg-slate-200/80 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">📊</span>
+                      <span className="font-medium text-slate-800">我的職涯歷程</span>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-slate-500" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -270,8 +565,8 @@ const Home: React.FC = () => {
       <section className="py-16 px-4 bg-gradient-to-b from-transparent to-white/50">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-2xl font-bold text-slate-800 mb-4">系統特色</h2>
-            <p className="text-slate-600">AI 智慧化處理，簡化申請流程</p>
+            <h2 className="text-2xl font-bold text-slate-900 mb-4">系統特色</h2>
+            <p className="text-slate-700">AI 智慧化處理，簡化申請流程</p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
@@ -287,9 +582,9 @@ const Home: React.FC = () => {
                 description: '根據規定自動計算獎勵金額，包含各項加成條件',
               },
               {
-                icon: '📊',
-                title: '職涯歷程追蹤',
-                description: '完整記錄個人學術發表歷程，累積職涯成就',
+                icon: '🎮',
+                title: '遊戲化激勵',
+                description: '成就徽章、排行榜、挑戰任務，讓學術發表更有動力',
               },
             ].map((feature) => (
               <motion.div
@@ -301,7 +596,7 @@ const Home: React.FC = () => {
                 <h3 className="text-lg font-semibold text-slate-800 mb-2">
                   {feature.title}
                 </h3>
-                <p className="text-slate-600">{feature.description}</p>
+                <p className="text-slate-700">{feature.description}</p>
               </motion.div>
             ))}
           </div>

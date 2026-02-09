@@ -25,6 +25,42 @@ export type ApplicantType = 'first_author' | 'corresponding' | 'co_author';
 
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected' | 'revision';
 
+// Multi-level approval workflow types
+export type ApprovalLevel = 'reviewer' | 'supervisor' | 'director';
+
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'returned';
+
+export interface ApprovalStep {
+  id: string;
+  applicationId: string;
+  level: ApprovalLevel;
+  status: ApprovalStatus;
+  approverId?: string;
+  approverName?: string;
+  comment?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ApplicationWithWorkflow extends PaperApplication {
+  paper: Paper;
+  applicantName: string;
+  applicantDepartment: string;
+  currentApprovalLevel: ApprovalLevel;
+  approvalSteps: ApprovalStep[];
+  verificationChecklist?: VerificationChecklist;
+}
+
+export interface VerificationChecklist {
+  paperInfoCorrect: boolean;
+  authorInfoCorrect: boolean;
+  journalInfoCorrect: boolean;
+  impactFactorVerified: boolean;
+  rewardCalculationCorrect: boolean;
+  documentsComplete: boolean;
+  notes?: string;
+}
+
 export interface Author {
   id: string;
   name: string;

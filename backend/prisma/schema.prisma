@@ -29,6 +29,13 @@ model User {
   applications PaperApplication[]
   reviews      PaperApplication[] @relation("Reviewer")
 
+  // Gamification Relations
+  achievements              UserAchievement[]
+  level                     UserLevel?
+  streaks                   Streak[]
+  challengeParticipations   ChallengeParticipant[]
+  gamificationNotifications GamificationNotification[]
+
   @@map("users")
 }
 
@@ -246,4 +253,142 @@ model AIAnalysisLog {
   createdAt    DateTime @default(now())
 
   @@map("ai_analysis_logs")
+}
+
+// ============================================
+// Gamification Models (Octalysis Framework)
+// ============================================
+
+// Achievement Definition
+model Achievement {
+  id          String              @id @default(uuid())
+  name        String
+  nameEn      String
+  description String
+  icon        String
+  category    AchievementCategory
+  tier        AchievementTier
+  requirement Json                // Stores AchievementRequirement
+  isHidden    Boolean             @default(false)
+  createdAt   DateTime            @default(now())
+
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+enum AchievementCategory {
+  PAPER
+  IMPACT
+  COLLABORATION
+  STREAK
+  SPECIAL
+}
+
+enum AchievementTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+}
+
+// User Achievement (Unlocked achievements)
+model UserAchievement {
+  id            String      @id @default(uuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime    @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+}
+
+// User Level and Points
+model UserLevel {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  level     Int      @default(1)
+  points    Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_levels")
+}
+
+// Streak Records (Loss & Avoidance)
+model Streak {
+  id        String     @id @default(uuid())
+  userId    String
+  type      StreakType
+  count     Int        @default(0)
+  lastDate  DateTime
+  bestCount Int        @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@map("streaks")
+}
+
+enum StreakType {
+  YEARLY_PUBLICATION
+  MONTHLY_SUBMISSION
+  CONSECUTIVE_APPROVAL
+}
+
+// Challenge System (Scarcity & Impatience)
+model Challenge {
+  id          String    @id @default(uuid())
+  title       String
+  description String
+  startDate   DateTime
+  endDate     DateTime
+  targetType  String    // paper_count, sci_count, total_if, department_rank
+  targetValue Int
+  bonusRate   Float     // e.g., 0.1 for 10% bonus
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  participants ChallengeParticipant[]
+
+  @@map("challenges")
+}
+
+// Challenge Participation
+model ChallengeParticipant {
+  id          String   @id @default(uuid())
+  challengeId String
+  userId      String
+  joinedAt    DateTime @default(now())
+  progress    Int      @default(0)
+  isCompleted Boolean  @default(false)
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, userId])
+  @@map("challenge_participants")
+}
+
+// Achievement Notifications
+model GamificationNotification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String   // achievement_unlocked, level_up, streak_milestone, challenge_completed, rank_change
+  title     String
+  message   String
+  icon      String?
+  data      Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("gamification_notifications")
 }

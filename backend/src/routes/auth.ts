@@ -4,29 +4,9 @@ import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
 import { AppError } from '../middleware/errorHandler.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
+import prisma from '../lib/prisma.js';
 
 const router = Router();
-
-// Mock user database (replace with Prisma in production)
-const users: Array<{
-  id: string;
-  email: string;
-  password: string;
-  name: string;
-  role: 'user' | 'admin' | 'reviewer';
-  department?: string;
-  employeeId?: string;
-}> = [
-  {
-    id: '1',
-    email: 'admin@chimei.org.tw',
-    password: '$2a$10$example', // bcrypt hash
-    name: '系統管理員',
-    role: 'admin',
-    department: '資訊部',
-    employeeId: 'CM000001',
-  },
-];
 
 // Login
 router.post(
@@ -47,20 +27,22 @@ router.post(
 
       const { email, password } = req.body;
 
-      // Find user
-      const user = users.find((u) => u.email === email);
+      const user = await prisma.user.findUnique({ where: { email } });
       if (!user) {
         return next(new AppError('帳號或密碼錯誤', 401));
       }
 
-      // Verify password (for demo, accept any password)
-      // In production: const isValid = await bcrypt.compare(password, user.password);
+      const isValid = await bcrypt.compare(password, user.password);
+      if (!isValid) {
+        return next(new AppError('帳號或密碼錯誤', 401));
+      }
 
-      // Generate token
+      const role = user.role.toLowerCase() as 'user' | 'admin' | 'reviewer';
+
       const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
+        { id: user.id, email: user.email, role },
         process.env.JWT_SECRET || 'your-secret-key',
-        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+        { expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as any }
       );
 
       res.json({
@@ -71,7 +53,7 @@ router.post(
             id: user.id,
             email: user.email,
             name: user.name,
-            role: user.role,
+            role,
             department: user.department,
             employeeId: user.employeeId,
           },
@@ -104,32 +86,29 @@ router.post(
 
       const { email, password, name, employeeId, department } = req.body;
 
-      // Check if email already exists
-      const existingUser = users.find((u) => u.email === email);
+      const existingUser = await prisma.user.findUnique({ where: { email } });
       if (existingUser) {
         return next(new AppError('此電子郵件已被註冊', 400));
       }
 
-      // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Create user
-      const newUser = {
-        id: (users.length + 1).toString(),
-        email,
-        password: hashedPassword,
-        name,
-        role: 'user' as const,
-        department,
-        employeeId,
-      };
-      users.push(newUser);
+      const newUser = await prisma.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          name,
+          employeeId,
+          department,
+          role: 'USER',
+        },
+      });
 
-      // Generate token
+      const role = 'user';
       const token = jwt.sign(
-        { id: newUser.id, email: newUser.email, role: newUser.role },
+        { id: newUser.id, email: newUser.email, role },
         process.env.JWT_SECRET || 'your-secret-key',
-        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+        { expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as any }
       );
 
       res.status(201).json({
@@ -140,7 +119,7 @@ router.post(
             id: newUser.id,
             email: newUser.email,
             name: newUser.name,
-            role: newUser.role,
+            role,
             department: newUser.department,
             employeeId: newUser.employeeId,
           },
@@ -158,7 +137,9 @@ router.get(
   authenticate,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const user = users.find((u) => u.id === req.user?.id);
+      const user = await prisma.user.findUnique({
+        where: { id: req.user?.id },
+      });
       if (!user) {
         return next(new AppError('User not found', 404));
       }
@@ -169,7 +150,7 @@ router.get(
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role,
+          role: user.role.toLowerCase(),
           department: user.department,
           employeeId: user.employeeId,
         },

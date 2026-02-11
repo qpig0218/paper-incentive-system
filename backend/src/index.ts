@@ -24,9 +24,12 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: process.env.NODE_ENV === 'production' ? true : (process.env.FRONTEND_URL || 'http://localhost:5173'),
   credentials: true,
 }));
+
+// Trust Azure proxy
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
@@ -47,6 +50,20 @@ app.use('/api/gamification', gamificationRoutes);
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Serve frontend static files in production
+if (process.env.NODE_ENV === 'production') {
+  const publicPath = path.join(process.cwd(), 'public');
+  app.use(express.static(publicPath));
+
+  // SPA fallback - all non-API routes serve index.html
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) {
+      return next();
+    }
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
+}
 
 // Error handling
 app.use(errorHandler);

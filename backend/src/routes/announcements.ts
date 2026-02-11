@@ -2,57 +2,40 @@ import { Router, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
-import type { Announcement } from '../types/index.js';
+import prisma from '../lib/prisma.js';
 
 const router = Router();
 
-// Mock announcements database
-const announcements: Announcement[] = [
-  {
-    id: '1',
-    title: '重要公告',
-    content: '114年度論文獎勵申請截止日期為12月31日，請同仁把握時間提出申請。',
-    type: 'urgent',
-    isActive: true,
-    startDate: '2024-01-01',
-    endDate: '2024-12-31',
-    createdAt: '2024-01-01',
-  },
-  {
-    id: '2',
-    title: '系統更新',
-    content: 'AI 自動辨識功能已上線，可自動判別論文類型及計算獎勵金額。',
-    type: 'success',
-    isActive: true,
-    startDate: '2024-01-01',
-    endDate: '2024-12-31',
-    createdAt: '2024-01-01',
-  },
-  {
-    id: '3',
-    title: '獎勵加成',
-    content: '刊登於「醫療品質」雜誌之文章，獎勵加成50%；刊登於「醫學教育」雜誌之文章，獎勵加成100%。',
-    type: 'info',
-    isActive: true,
-    startDate: '2024-01-01',
-    endDate: '2024-12-31',
-    createdAt: '2024-01-01',
-  },
-];
+const mapAnn = (a: any) => ({
+  id: a.id,
+  title: a.title,
+  content: a.content,
+  type: a.type.toLowerCase(),
+  isActive: a.isActive,
+  startDate: a.startDate?.toISOString().split('T')[0],
+  endDate: a.endDate?.toISOString().split('T')[0],
+  createdAt: a.createdAt?.toISOString(),
+  updatedAt: a.updatedAt?.toISOString(),
+});
 
 // Get active announcements (public)
 router.get(
   '/active',
-  async (req, res: Response, next) => {
+  async (req: any, res: Response, next: NextFunction) => {
     try {
-      const now = new Date().toISOString().split('T')[0];
-      const activeAnnouncements = announcements.filter(
-        (a) => a.isActive && a.startDate <= now && a.endDate >= now
-      );
+      const now = new Date();
+      const announcements = await prisma.announcement.findMany({
+        where: {
+          isActive: true,
+          startDate: { lte: now },
+          endDate: { gte: now },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
 
       res.json({
         success: true,
-        data: activeAnnouncements,
+        data: announcements.map(mapAnn),
       });
     } catch (error) {
       next(error);
@@ -65,11 +48,15 @@ router.get(
   '/',
   authenticate,
   requireAdmin,
-  async (req: AuthRequest, res: Response, next) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
+      const announcements = await prisma.announcement.findMany({
+        orderBy: { createdAt: 'desc' },
+      });
+
       res.json({
         success: true,
-        data: announcements,
+        data: announcements.map(mapAnn),
       });
     } catch (error) {
       next(error);
@@ -80,17 +67,17 @@ router.get(
 // Get announcement by ID
 router.get(
   '/:id',
-  async (req, res: Response, next) => {
+  async (req: any, res: Response, next: NextFunction) => {
     try {
-      const announcement = announcements.find((a) => a.id === req.params.id);
+      const announcement = await prisma.announcement.findUnique({
+        where: { id: req.params.id },
+      });
+
       if (!announcement) {
         return next(new AppError('Announcement not found', 404));
       }
 
-      res.json({
-        success: true,
-        data: announcement,
-      });
+      res.json({ success: true, data: mapAnn(announcement) });
     } catch (error) {
       next(error);
     }
@@ -109,7 +96,7 @@ router.post(
     body('startDate').isISO8601(),
     body('endDate').isISO8601(),
   ],
-  async (req: AuthRequest, res: Response, next) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -118,22 +105,20 @@ router.post(
 
       const { title, content, type, startDate, endDate, isActive = true } = req.body;
 
-      const newAnnouncement: Announcement = {
-        id: (announcements.length + 1).toString(),
-        title,
-        content,
-        type,
-        isActive,
-        startDate,
-        endDate,
-        createdAt: new Date().toISOString(),
-      };
-
-      announcements.push(newAnnouncement);
+      const announcement = await prisma.announcement.create({
+        data: {
+          title,
+          content,
+          type: type.toUpperCase(),
+          isActive,
+          startDate: new Date(startDate),
+          endDate: new Date(endDate),
+        },
+      });
 
       res.status(201).json({
         success: true,
-        data: newAnnouncement,
+        data: mapAnn(announcement),
         message: '公告已建立',
       });
     } catch (error) {
@@ -147,22 +132,30 @@ router.put(
   '/:id',
   authenticate,
   requireAdmin,
-  async (req: AuthRequest, res: Response, next) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const index = announcements.findIndex((a) => a.id === req.params.id);
-      if (index === -1) {
+      const existing = await prisma.announcement.findUnique({ where: { id: req.params.id } });
+      if (!existing) {
         return next(new AppError('Announcement not found', 404));
       }
 
-      announcements[index] = {
-        ...announcements[index],
-        ...req.body,
-        updatedAt: new Date().toISOString(),
-      };
+      const { title, content, type, startDate, endDate, isActive } = req.body;
+
+      const announcement = await prisma.announcement.update({
+        where: { id: req.params.id },
+        data: {
+          ...(title && { title }),
+          ...(content && { content }),
+          ...(type && { type: type.toUpperCase() }),
+          ...(startDate && { startDate: new Date(startDate) }),
+          ...(endDate && { endDate: new Date(endDate) }),
+          ...(isActive !== undefined && { isActive }),
+        },
+      });
 
       res.json({
         success: true,
-        data: announcements[index],
+        data: mapAnn(announcement),
         message: '公告已更新',
       });
     } catch (error) {
@@ -176,19 +169,16 @@ router.delete(
   '/:id',
   authenticate,
   requireAdmin,
-  async (req: AuthRequest, res: Response, next) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const index = announcements.findIndex((a) => a.id === req.params.id);
-      if (index === -1) {
+      const existing = await prisma.announcement.findUnique({ where: { id: req.params.id } });
+      if (!existing) {
         return next(new AppError('Announcement not found', 404));
       }
 
-      announcements.splice(index, 1);
+      await prisma.announcement.delete({ where: { id: req.params.id } });
 
-      res.json({
-        success: true,
-        message: '公告已刪除',
-      });
+      res.json({ success: true, message: '公告已刪除' });
     } catch (error) {
       next(error);
     }
@@ -200,20 +190,22 @@ router.put(
   '/:id/toggle',
   authenticate,
   requireAdmin,
-  async (req: AuthRequest, res: Response, next) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const index = announcements.findIndex((a) => a.id === req.params.id);
-      if (index === -1) {
+      const existing = await prisma.announcement.findUnique({ where: { id: req.params.id } });
+      if (!existing) {
         return next(new AppError('Announcement not found', 404));
       }
 
-      announcements[index].isActive = !announcements[index].isActive;
-      announcements[index].updatedAt = new Date().toISOString();
+      const announcement = await prisma.announcement.update({
+        where: { id: req.params.id },
+        data: { isActive: !existing.isActive },
+      });
 
       res.json({
         success: true,
-        data: announcements[index],
-        message: announcements[index].isActive ? '公告已啟用' : '公告已停用',
+        data: mapAnn(announcement),
+        message: announcement.isActive ? '公告已啟用' : '公告已停用',
       });
     } catch (error) {
       next(error);

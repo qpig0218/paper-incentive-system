@@ -22,6 +22,7 @@ interface FileUploadProps {
   };
   accept?: Record<string, string[]>;
   maxSize?: number;
+  formatLabel?: string;
 }
 
 const FileUpload: React.FC<FileUploadProps> = ({
@@ -31,6 +32,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
   analysisResult,
   accept = { 'application/pdf': ['.pdf'] },
   maxSize = 50 * 1024 * 1024, // 50MB
+  formatLabel,
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -45,7 +47,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
         if (rejection.errors[0]?.code === 'file-too-large') {
           setError(`檔案大小超過限制 (最大 ${Math.round(maxSize / 1024 / 1024)}MB)`);
         } else if (rejection.errors[0]?.code === 'file-invalid-type') {
-          setError('不支援此檔案格式，請上傳 PDF 檔案');
+          setError(`不支援此檔案格式，請上傳${formatLabel || '支援格式的'}檔案`);
         } else {
           setError('檔案無法上傳，請重試');
         }
@@ -132,7 +134,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
               </div>
 
               <div className="flex items-center justify-center gap-4 text-xs text-slate-400">
-                <span>支援 PDF 格式</span>
+                <span>{formatLabel || '支援 PDF 格式'}</span>
                 <span>•</span>
                 <span>最大 {Math.round(maxSize / 1024 / 1024)}MB</span>
               </div>
@@ -147,8 +149,14 @@ const FileUpload: React.FC<FileUploadProps> = ({
               onClick={(e) => e.stopPropagation()}
             >
               {/* File Icon */}
-              <div className="w-14 h-14 bg-gradient-to-br from-red-100 to-red-200 rounded-xl flex items-center justify-center flex-shrink-0">
-                <FileText className="w-7 h-7 text-red-600" />
+              <div className={`w-14 h-14 bg-gradient-to-br rounded-xl flex items-center justify-center flex-shrink-0 ${
+                selectedFile?.name.match(/\.xlsx?$/i)
+                  ? 'from-emerald-100 to-emerald-200'
+                  : 'from-red-100 to-red-200'
+              }`}>
+                <FileText className={`w-7 h-7 ${
+                  selectedFile?.name.match(/\.xlsx?$/i) ? 'text-emerald-600' : 'text-red-600'
+                }`} />
               </div>
 
               {/* File Info */}

@@ -11,10 +11,17 @@ import {
   Save,
   Brain,
   AlertTriangle,
+  Table,
+  Lightbulb,
+  MessageSquare,
+  Loader2,
+  Send,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import FileUpload from '../components/FileUpload';
-import type { AIAnalysisResult, PaperType, AuthorRole, Author } from '../types';
+import api from '../services/api';
+import { aiApi } from '../services/api';
+import type { AIAnalysisResult, ExcelAnalysisResult, PaperType, AuthorRole, Author } from '../types';
 
 type Step = 'upload' | 'review' | 'author' | 'reward' | 'confirm';
 
@@ -42,6 +49,7 @@ const paperTypeLabels: Record<PaperType, string> = {
 };
 
 const Upload: React.FC = () => {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<Step>('upload');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AIAnalysisResult | null>(null);
@@ -75,102 +83,136 @@ const Upload: React.FC = () => {
     totalAmount: 0,
   });
 
-  const handleFileSelect = (_file: File) => {
-    // File selected, ready for analysis
+  // Excel analysis state
+  const [uploadedFileType, setUploadedFileType] = useState<'pdf' | 'excel' | null>(null);
+  const [excelResult, setExcelResult] = useState<ExcelAnalysisResult | null>(null);
+  const [excelQuestion, setExcelQuestion] = useState('');
+  const [excelAnswer, setExcelAnswer] = useState('');
+  const [askingExcel, setAskingExcel] = useState(false);
+
+  const handleFileSelect = (file: File) => {
+    const isExcel = file.name.match(/\.xlsx?$/i) ||
+      file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      file.type === 'application/vnd.ms-excel';
+    setUploadedFileType(isExcel ? 'excel' : 'pdf');
+    setExcelResult(null);
+    setExcelAnswer('');
   };
 
-  const handleAnalyze = async (_file: File) => {
+  const handleAnalyze = async (file: File) => {
     setIsAnalyzing(true);
 
-    // Simulate AI analysis
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    const isExcel = file.name.match(/\.xlsx?$/i) ||
+      file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      file.type === 'application/vnd.ms-excel';
 
-    // Mock result
-    const mockResult: AIAnalysisResult = {
-      paperType: 'original',
-      confidence: 0.92,
-      extractedFields: {
-        title: 'Machine Learning Approaches for Early Detection of Heart Failure',
-        authors: ['王大明', '李小華', '張醫師'],
-        journal: 'Journal of Medical Internet Research',
-        volume: '26',
-        issue: '3',
-        pages: 'e45678',
-        doi: '10.2196/45678',
-      },
-      contentAnalysis: {
-        hasHolisticCare: false,
-        hasMedicalQuality: true,
-        hasMedicalEducation: false,
-        themes: ['醫療品質', '人工智慧', '心臟衰竭'],
-      },
-      journalInfo: {
-        name: 'Journal of Medical Internet Research',
-        isSci: true,
-        isSsci: false,
-        impactFactor: 5.428,
-        quartile: 'Q1',
-        ranking: 12,
-        totalInField: 120,
-      },
-      suggestedReward: {
-        baseAmount: 60000,
-        bonuses: [
-          { type: 'highImpact', description: 'IF≧5 加成', percentage: 100, amount: 60000 },
-        ],
-        deductions: [],
-        totalAmount: 120000,
-        formula: '基本獎勵 60,000 + IF加成 60,000 = 120,000',
-      },
-    };
-
-    setAnalysisResult(mockResult);
-
-    // Pre-fill form with extracted data
-    setFormData((prev) => ({
-      ...prev,
-      title: mockResult.extractedFields.title || '',
-      paperType: mockResult.paperType,
-      journalName: mockResult.extractedFields.journal || '',
-      volume: mockResult.extractedFields.volume || '',
-      issue: mockResult.extractedFields.issue || '',
-      pages: mockResult.extractedFields.pages || '',
-      doi: mockResult.extractedFields.doi || '',
-      impactFactor: mockResult.journalInfo?.impactFactor?.toString() || '',
-      isScis: mockResult.journalInfo?.isSci || false,
-      hasMedicalQuality: mockResult.contentAnalysis.hasMedicalQuality,
-      hasHolisticCare: mockResult.contentAnalysis.hasHolisticCare,
-      hasMedicalEducation: mockResult.contentAnalysis.hasMedicalEducation,
-    }));
-
-    // Pre-fill authors
-    if (mockResult.extractedFields.authors) {
-      setAuthors(
-        mockResult.extractedFields.authors.map((name, index) => ({
-          name,
-          affiliation: '奇美醫院',
-          isFirst: index === 0,
-          isCorresponding: false,
-          order: index + 1,
-        }))
-      );
+    if (isExcel) {
+      // Excel analysis flow
+      try {
+        const result = await aiApi.analyzeExcel(file);
+        if (result.success && result.data) {
+          setExcelResult(result.data);
+        } else {
+          alert('Excel 分析失敗，請稍後再試');
+        }
+      } catch (err) {
+        console.error('Excel analysis error:', err);
+        alert('Excel 分析發生錯誤，請稍後再試');
+      } finally {
+        setIsAnalyzing(false);
+      }
+      return;
     }
 
-    // Pre-fill reward
-    if (mockResult.suggestedReward) {
-      setReward({
-        baseAmount: mockResult.suggestedReward.baseAmount,
-        bonuses: mockResult.suggestedReward.bonuses.map((b) => ({
-          type: b.type,
-          percentage: b.percentage,
-          amount: b.amount,
-        })),
-        totalAmount: mockResult.suggestedReward.totalAmount,
+    // PDF analysis flow
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
+
+      const token = localStorage.getItem('authToken');
+      const response = await fetch('/api/ai/analyze', {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formDataUpload,
       });
-    }
 
-    setIsAnalyzing(false);
-    setCurrentStep('review');
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        const result: AIAnalysisResult = data.data;
+        setAnalysisResult(result);
+
+        // Pre-fill form with extracted data
+        setFormData((prev) => ({
+          ...prev,
+          title: result.extractedFields?.title || '',
+          paperType: result.paperType || prev.paperType,
+          journalName: result.extractedFields?.journal || '',
+          volume: result.extractedFields?.volume || '',
+          issue: result.extractedFields?.issue || '',
+          pages: result.extractedFields?.pages || '',
+          doi: result.extractedFields?.doi || '',
+          impactFactor: result.journalInfo?.impactFactor?.toString() || '',
+          isScis: result.journalInfo?.isSci || false,
+          hasMedicalQuality: result.contentAnalysis?.hasMedicalQuality || false,
+          hasHolisticCare: result.contentAnalysis?.hasHolisticCare || false,
+          hasMedicalEducation: result.contentAnalysis?.hasMedicalEducation || false,
+        }));
+
+        // Pre-fill authors
+        if (result.extractedFields?.authors) {
+          setAuthors(
+            result.extractedFields.authors.map((name, index) => ({
+              name,
+              affiliation: '奇美醫院',
+              isFirst: index === 0,
+              isCorresponding: false,
+              order: index + 1,
+            }))
+          );
+        }
+
+        // Pre-fill reward
+        if (result.suggestedReward) {
+          setReward({
+            baseAmount: result.suggestedReward.baseAmount,
+            bonuses: result.suggestedReward.bonuses.map((b) => ({
+              type: b.type,
+              percentage: b.percentage,
+              amount: b.amount,
+            })),
+            totalAmount: result.suggestedReward.totalAmount,
+          });
+        }
+
+        setCurrentStep('review');
+      } else {
+        alert('AI 分析失敗：' + (data.message || '請稍後再試'));
+      }
+    } catch (err) {
+      console.error('AI analysis error:', err);
+      alert('AI 分析發生錯誤，請稍後再試');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleAskExcel = async () => {
+    if (!excelResult?.fileId || !excelQuestion.trim()) return;
+    setAskingExcel(true);
+    try {
+      const result = await aiApi.askAboutExcel(excelResult.fileId, excelQuestion);
+      if (result.success && result.data) {
+        setExcelAnswer(result.data.answer);
+      }
+    } catch (err) {
+      console.error('Excel Q&A error:', err);
+      setExcelAnswer('抱歉，無法取得回答，請稍後再試。');
+    } finally {
+      setAskingExcel(false);
+    }
   };
 
   const currentStepIndex = steps.findIndex((s) => s.id === currentStep);
@@ -189,10 +231,62 @@ const Upload: React.FC = () => {
     }
   };
 
+  const [submitting, setSubmitting] = useState(false);
+
   const handleSubmit = async () => {
-    // Submit application
-    console.log('Submitting:', { formData, authors, reward });
-    alert('申請已送出！');
+    setSubmitting(true);
+    try {
+      // Step 1: Create the paper
+      const paperRes = await api.post('/papers', {
+        title: formData.title,
+        titleChinese: formData.titleChinese || undefined,
+        paperType: formData.paperType,
+        publicationDate: formData.publicationDate || undefined,
+        volume: formData.volume || undefined,
+        issue: formData.issue || undefined,
+        pages: formData.pages || undefined,
+        doi: formData.doi || undefined,
+        authors: authors.map((a, idx) => ({
+          name: a.name,
+          affiliation: a.affiliation || '奇美醫院',
+          isFirst: a.isFirst || false,
+          isCorresponding: a.isCorresponding || false,
+          order: idx + 1,
+        })),
+        journalInfo: formData.journalName ? {
+          name: formData.journalName,
+          isSci: formData.isScis,
+          isSsci: false,
+          impactFactor: formData.impactFactor ? parseFloat(formData.impactFactor) : undefined,
+        } : undefined,
+      });
+
+      if (!paperRes.data.success) {
+        alert('論文建立失敗：' + (paperRes.data.message || '請稍後再試'));
+        return;
+      }
+
+      const paperId = paperRes.data.data.id;
+
+      // Step 2: Submit application for the paper
+      const appRes = await api.post('/applications', {
+        paperId,
+        applicantType: formData.authorRole === 'first' ? 'first_author' : formData.authorRole === 'corresponding' ? 'corresponding' : 'co_author',
+        rewardAmount: reward.totalAmount || undefined,
+      });
+
+      if (appRes.data.success) {
+        alert('申請已送出！');
+        navigate('/my-papers');
+      } else {
+        alert('申請送出失敗：' + (appRes.data.message || '請稍後再試'));
+      }
+    } catch (err: any) {
+      console.error('Submit error:', err);
+      alert('送出失敗：' + (err.response?.data?.message || err.message || '請稍後再試'));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -270,9 +364,9 @@ const Upload: React.FC = () => {
             {currentStep === 'upload' && (
               <div className="space-y-6">
                 <div className="text-center mb-8">
-                  <h2 className="text-xl font-semibold text-slate-800 mb-2">上傳論文 PDF</h2>
+                  <h2 className="text-xl font-semibold text-slate-800 mb-2">上傳論文檔案</h2>
                   <p className="text-slate-500">
-                    上傳論文 PDF 檔案後，AI 將自動分析並提取相關資訊
+                    上傳論文 PDF 或 Excel 檔案後，AI 將自動分析並提取相關資訊
                   </p>
                 </div>
 
@@ -283,11 +377,20 @@ const Upload: React.FC = () => {
                   analysisResult={
                     analysisResult
                       ? { success: true, message: 'AI 分析完成，已自動填入論文資訊' }
+                      : excelResult
+                      ? { success: true, message: 'Excel 分析完成' }
                       : undefined
                   }
+                  accept={{
+                    'application/pdf': ['.pdf'],
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+                    'application/vnd.ms-excel': ['.xls'],
+                  }}
+                  formatLabel="支援 PDF / Excel 格式"
                 />
 
-                {analysisResult && (
+                {/* PDF Analysis Result */}
+                {analysisResult && uploadedFileType === 'pdf' && (
                   <div className="mt-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
                     <div className="flex items-start gap-3">
                       <Brain className="w-5 h-5 text-emerald-600 mt-0.5" />
@@ -304,6 +407,163 @@ const Upload: React.FC = () => {
                           </p>
                         )}
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Excel Analysis Result */}
+                {excelResult && uploadedFileType === 'excel' && (
+                  <div className="mt-6 space-y-4">
+                    {/* Data Overview */}
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                      <div className="flex items-start gap-3">
+                        <Table className="w-5 h-5 text-emerald-600 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="font-medium text-emerald-800">Excel 資料概覽</p>
+                          <div className="grid grid-cols-3 gap-4 mt-2">
+                            <div className="text-center p-2 bg-white rounded-lg">
+                              <p className="text-lg font-bold text-emerald-700">{excelResult.totalSheets}</p>
+                              <p className="text-xs text-slate-500">工作表</p>
+                            </div>
+                            <div className="text-center p-2 bg-white rounded-lg">
+                              <p className="text-lg font-bold text-emerald-700">{excelResult.totalRows.toLocaleString()}</p>
+                              <p className="text-xs text-slate-500">資料列</p>
+                            </div>
+                            <div className="text-center p-2 bg-white rounded-lg">
+                              <p className="text-lg font-bold text-emerald-700">{excelResult.totalCells.toLocaleString()}</p>
+                              <p className="text-xs text-slate-500">儲存格</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Data Preview */}
+                    {excelResult.sheets.map((sheet) => (
+                      <div key={sheet.name} className="glass-card overflow-hidden">
+                        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+                          <h4 className="font-medium text-slate-700 flex items-center gap-2">
+                            <Table className="w-4 h-4 text-emerald-500" />
+                            {sheet.name}
+                            <span className="text-xs text-slate-400">({sheet.rowCount} 列 × {sheet.columnCount} 欄)</span>
+                          </h4>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-slate-50">
+                              <tr>
+                                {sheet.headers.map((h) => (
+                                  <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-slate-600 whitespace-nowrap">
+                                    {h}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {sheet.preview.map((row, idx) => (
+                                <tr key={idx} className="hover:bg-slate-50">
+                                  {sheet.headers.map((h) => (
+                                    <td key={h} className="px-3 py-2 text-slate-700 whitespace-nowrap max-w-[200px] truncate">
+                                      {String(row[h] ?? '')}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {sheet.rowCount > 5 && (
+                          <div className="px-4 py-2 text-center text-xs text-slate-400 bg-slate-50 border-t">
+                            顯示前 5 筆，共 {sheet.rowCount} 筆資料
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* AI Analysis */}
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                      <div className="flex items-start gap-3">
+                        <Brain className="w-5 h-5 text-blue-600 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="font-medium text-blue-800 mb-2">AI 分析結果</p>
+                          <p className="text-sm text-blue-700 mb-3">{excelResult.aiAnalysis.summary}</p>
+
+                          {excelResult.aiAnalysis.keyFindings.length > 0 && (
+                            <div className="mb-3">
+                              <p className="text-xs font-semibold text-blue-800 mb-1 flex items-center gap-1">
+                                <Lightbulb className="w-3 h-3" /> 關鍵發現
+                              </p>
+                              <ul className="space-y-1">
+                                {excelResult.aiAnalysis.keyFindings.map((f, i) => (
+                                  <li key={i} className="text-sm text-blue-700 flex items-start gap-1">
+                                    <span className="text-blue-400 mt-1">•</span> {f}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {excelResult.aiAnalysis.insights.length > 0 && (
+                            <div className="mb-3">
+                              <p className="text-xs font-semibold text-blue-800 mb-1">洞見</p>
+                              <ul className="space-y-1">
+                                {excelResult.aiAnalysis.insights.map((ins, i) => (
+                                  <li key={i} className="text-sm text-blue-700 flex items-start gap-1">
+                                    <span className="text-blue-400 mt-1">•</span> {ins}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {excelResult.aiAnalysis.recommendations.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold text-blue-800 mb-1">建議</p>
+                              <ul className="space-y-1">
+                                {excelResult.aiAnalysis.recommendations.map((rec, i) => (
+                                  <li key={i} className="text-sm text-blue-700 flex items-start gap-1">
+                                    <span className="text-blue-400 mt-1">•</span> {rec}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Ask AI about Excel */}
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                      <p className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-primary-500" />
+                        向 AI 提問
+                      </p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={excelQuestion}
+                          onChange={(e) => setExcelQuestion(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAskExcel()}
+                          placeholder="例如：這份資料中有哪些論文？"
+                          className="input-field flex-1"
+                        />
+                        <button
+                          onClick={handleAskExcel}
+                          disabled={askingExcel || !excelQuestion.trim()}
+                          className="btn-primary flex items-center gap-2 disabled:opacity-50"
+                        >
+                          {askingExcel ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Send className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                      {excelAnswer && (
+                        <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap">{excelAnswer}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -701,13 +961,13 @@ const Upload: React.FC = () => {
               </button>
 
               {currentStep === 'confirm' ? (
-                <button onClick={handleSubmit} className="btn-primary flex items-center gap-2">
+                <button onClick={handleSubmit} disabled={submitting} className="btn-primary flex items-center gap-2">
                   <Save className="w-4 h-4" />
-                  送出申請
+                  {submitting ? '送出中...' : '送出申請'}
                 </button>
-              ) : currentStep === 'upload' && !analysisResult ? (
+              ) : currentStep === 'upload' && !analysisResult && !excelResult ? (
                 <button disabled className="btn-primary opacity-50 cursor-not-allowed flex items-center gap-2">
-                  請先上傳並分析論文
+                  請先上傳並分析檔案
                   <ArrowRight className="w-4 h-4" />
                 </button>
               ) : (

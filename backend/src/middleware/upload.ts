@@ -21,17 +21,30 @@ const storage = multer.diskStorage({
   },
 });
 
-// File filter for PDF
+const ALLOWED_MIMETYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+];
+
+// File filter for PDF and Excel
 const fileFilter = (
   req: Express.Request,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback
 ) => {
-  if (file.mimetype === 'application/pdf') {
+  if (ALLOWED_MIMETYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only PDF files are allowed'));
+    cb(new Error('Only PDF and Excel files are allowed'));
   }
+};
+
+export const isExcelFile = (mimetype: string): boolean => {
+  return (
+    mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    mimetype === 'application/vnd.ms-excel'
+  );
 };
 
 // Export multer instance

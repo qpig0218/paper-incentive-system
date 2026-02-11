@@ -2,26 +2,40 @@ import { Router, Response, NextFunction } from 'express';
 import { body, query, validationResult } from 'express-validator';
 import { authenticate, requireReviewer, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
-import type { PaperApplication, ApplicationStatus } from '../types/index.js';
+import prisma from '../lib/prisma.js';
 
 const router = Router();
 
-// Mock applications database
-const applications: PaperApplication[] = [
-  {
-    id: '1',
-    paperId: '1',
-    applicantId: '1',
-    applicantType: 'first_author',
-    status: 'pending',
-    rewardAmount: 85000,
-    submittedAt: '2024-03-20',
-    createdAt: '2024-03-20',
-    updatedAt: '2024-03-20',
-  },
-];
+const mapApp = (a: any) => ({
+  id: a.id,
+  paperId: a.paperId,
+  applicantId: a.applicantId,
+  applicantType: a.applicantType.toLowerCase(),
+  status: a.status.toLowerCase(),
+  rewardAmount: a.rewardAmount,
+  rewardFormula: a.rewardFormula,
+  hasHolisticCare: a.hasHolisticCare,
+  hasMedicalQuality: a.hasMedicalQuality,
+  hasMedicalEducation: a.hasMedicalEducation,
+  submittedAt: a.submittedAt?.toISOString(),
+  reviewedAt: a.reviewedAt?.toISOString(),
+  reviewComment: a.reviewComment,
+  reviewerId: a.reviewerId,
+  createdAt: a.createdAt?.toISOString(),
+  updatedAt: a.updatedAt?.toISOString(),
+  paper: a.paper ? {
+    id: a.paper.id,
+    title: a.paper.title,
+    paperType: a.paper.paperType.toLowerCase(),
+  } : undefined,
+  applicant: a.applicant ? {
+    id: a.applicant.id,
+    name: a.applicant.name,
+    department: a.applicant.department,
+  } : undefined,
+});
 
-// Get all applications (admin/reviewer)
+// Get all applications
 router.get(
   '/',
   authenticate,
@@ -39,39 +53,36 @@ router.get(
 
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
-      const status = req.query.status as ApplicationStatus | undefined;
+      const status = req.query.status as string | undefined;
 
-      let filteredApplications = [...applications];
+      const where: any = {};
 
-      // Filter by user if not admin/reviewer
       if (req.user?.role === 'user') {
-        filteredApplications = filteredApplications.filter(
-          (a) => a.applicantId === req.user?.id
-        );
+        where.applicantId = req.user.id;
       }
 
-      // Filter by status
       if (status) {
-        filteredApplications = filteredApplications.filter((a) => a.status === status);
+        where.status = status.toUpperCase();
       }
 
-      // Pagination
-      const total = filteredApplications.length;
-      const startIndex = (page - 1) * limit;
-      const paginatedApplications = filteredApplications.slice(
-        startIndex,
-        startIndex + limit
-      );
+      const [apps, total] = await Promise.all([
+        prisma.paperApplication.findMany({
+          where,
+          include: {
+            paper: { select: { id: true, title: true, paperType: true } },
+            applicant: { select: { id: true, name: true, department: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        prisma.paperApplication.count({ where }),
+      ]);
 
       res.json({
         success: true,
-        data: paginatedApplications,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
+        data: apps.map(mapApp),
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       });
     } catch (error) {
       next(error);
@@ -85,13 +96,17 @@ router.get(
   authenticate,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const myApplications = applications.filter(
-        (a) => a.applicantId === req.user?.id
-      );
+      const apps = await prisma.paperApplication.findMany({
+        where: { applicantId: req.user!.id },
+        include: {
+          paper: { select: { id: true, title: true, paperType: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
 
       res.json({
         success: true,
-        data: myApplications,
+        data: apps.map(mapApp),
       });
     } catch (error) {
       next(error);
@@ -105,23 +120,23 @@ router.get(
   authenticate,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const application = applications.find((a) => a.id === req.params.id);
-      if (!application) {
+      const app = await prisma.paperApplication.findUnique({
+        where: { id: req.params.id },
+        include: {
+          paper: { select: { id: true, title: true, paperType: true } },
+          applicant: { select: { id: true, name: true, department: true } },
+        },
+      });
+
+      if (!app) {
         return next(new AppError('Application not found', 404));
       }
 
-      // Check permission
-      if (
-        req.user?.role === 'user' &&
-        application.applicantId !== req.user.id
-      ) {
+      if (req.user?.role === 'user' && app.applicantId !== req.user.id) {
         return next(new AppError('Access denied', 403));
       }
 
-      res.json({
-        success: true,
-        data: application,
-      });
+      res.json({ success: true, data: mapApp(app) });
     } catch (error) {
       next(error);
     }
@@ -143,26 +158,24 @@ router.post(
         return res.status(400).json({ success: false, errors: errors.array() });
       }
 
-      const { paperId, applicantType, rewardAmount, rewardCalculation } = req.body;
+      const { paperId, applicantType, rewardAmount } = req.body;
 
-      const newApplication: PaperApplication = {
-        id: (applications.length + 1).toString(),
-        paperId,
-        applicantId: req.user!.id,
-        applicantType,
-        status: 'pending',
-        rewardAmount,
-        rewardCalculation,
-        submittedAt: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      applications.push(newApplication);
+      const app = await prisma.paperApplication.create({
+        data: {
+          paperId,
+          applicantId: req.user!.id,
+          applicantType: applicantType.toUpperCase(),
+          status: 'PENDING',
+          rewardAmount,
+        },
+        include: {
+          paper: { select: { id: true, title: true, paperType: true } },
+        },
+      });
 
       res.status(201).json({
         success: true,
-        data: newApplication,
+        data: mapApp(app),
         message: '申請已送出',
       });
     } catch (error) {
@@ -171,7 +184,7 @@ router.post(
   }
 );
 
-// Review application (approve/reject)
+// Review application
 router.put(
   '/:id/review',
   authenticate,
@@ -187,33 +200,35 @@ router.put(
         return res.status(400).json({ success: false, errors: errors.array() });
       }
 
-      const index = applications.findIndex((a) => a.id === req.params.id);
-      if (index === -1) {
+      const existing = await prisma.paperApplication.findUnique({ where: { id: req.params.id } });
+      if (!existing) {
         return next(new AppError('Application not found', 404));
       }
 
       const { status, comment, rewardAmount } = req.body;
 
-      applications[index] = {
-        ...applications[index],
-        status,
-        reviewedAt: new Date().toISOString(),
-        reviewedBy: req.user!.id,
-        reviewComment: comment,
-        rewardAmount: rewardAmount || applications[index].rewardAmount,
-        updatedAt: new Date().toISOString(),
-      };
+      const app = await prisma.paperApplication.update({
+        where: { id: req.params.id },
+        data: {
+          status: status.toUpperCase(),
+          reviewedAt: new Date(),
+          reviewerId: req.user!.id,
+          reviewComment: comment,
+          ...(rewardAmount !== undefined && { rewardAmount }),
+        },
+        include: {
+          paper: { select: { id: true, title: true, paperType: true } },
+        },
+      });
 
-      const statusMessage = {
-        approved: '已核准',
-        rejected: '已退件',
-        revision: '需修改',
+      const statusMessage: Record<string, string> = {
+        approved: '已核准', rejected: '已退件', revision: '需修改',
       };
 
       res.json({
         success: true,
-        data: applications[index],
-        message: `申請${statusMessage[status as keyof typeof statusMessage]}`,
+        data: mapApp(app),
+        message: `申請${statusMessage[status]}`,
       });
     } catch (error) {
       next(error);
@@ -221,36 +236,39 @@ router.put(
   }
 );
 
-// Cancel application
+// Cancel / Delete application
 router.delete(
   '/:id',
   authenticate,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const index = applications.findIndex((a) => a.id === req.params.id);
-      if (index === -1) {
+      const app = await prisma.paperApplication.findUnique({ where: { id: req.params.id } });
+      if (!app) {
         return next(new AppError('Application not found', 404));
       }
 
-      // Check permission
-      if (
-        req.user?.role === 'user' &&
-        applications[index].applicantId !== req.user.id
-      ) {
-        return next(new AppError('Access denied', 403));
+      const isAdminOrReviewer = req.user?.role === 'admin' || req.user?.role === 'reviewer';
+
+      if (isAdminOrReviewer) {
+        // Admin/Reviewer can delete any application regardless of status
+        const deletedStatus = app.status.toLowerCase();
+        await prisma.paperApplication.delete({ where: { id: req.params.id } });
+        res.json({
+          success: true,
+          message: deletedStatus === 'approved' ? '已刪除核准的申請' : '申請已刪除',
+          deletedStatus,
+        });
+      } else {
+        // Regular user: can only delete own pending applications
+        if (app.applicantId !== req.user!.id) {
+          return next(new AppError('Access denied', 403));
+        }
+        if (app.status !== 'PENDING') {
+          return next(new AppError('只能取消待審核的申請', 400));
+        }
+        await prisma.paperApplication.delete({ where: { id: req.params.id } });
+        res.json({ success: true, message: '申請已取消', deletedStatus: 'pending' });
       }
-
-      // Can only cancel pending applications
-      if (applications[index].status !== 'pending') {
-        return next(new AppError('只能取消待審核的申請', 400));
-      }
-
-      applications.splice(index, 1);
-
-      res.json({
-        success: true,
-        message: '申請已取消',
-      });
     } catch (error) {
       next(error);
     }

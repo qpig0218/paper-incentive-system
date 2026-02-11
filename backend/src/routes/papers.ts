@@ -3,37 +3,9 @@ import { body, query, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 import { AppError } from '../middleware/errorHandler.js';
-import type { Paper, PaperType } from '../types/index.js';
+import prisma from '../lib/prisma.js';
 
 const router = Router();
-
-// Mock papers database
-const papers: Paper[] = [
-  {
-    id: '1',
-    title: 'Machine Learning Approaches for Early Detection of Heart Failure',
-    titleChinese: '機器學習方法於心臟衰竭早期偵測之系統性回顧',
-    authors: [
-      { id: '1', name: '王大明', affiliation: '奇美醫院', isFirst: true, isCorresponding: true, order: 1 },
-      { id: '2', name: '李小華', affiliation: '奇美醫院', isFirst: false, isCorresponding: false, order: 2 },
-    ],
-    paperType: 'original',
-    journalInfo: {
-      name: 'Journal of Medical Internet Research',
-      isSci: true,
-      isSsci: false,
-      impactFactor: 5.428,
-      quartile: 'Q1',
-    },
-    publicationDate: '2024-03-15',
-    volume: '26',
-    issue: '3',
-    pages: 'e45678',
-    doi: '10.2196/45678',
-    createdAt: '2024-03-15',
-    updatedAt: '2024-03-15',
-  },
-];
 
 // Get all papers
 router.get(
@@ -53,35 +25,83 @@ router.get(
 
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
-      const type = req.query.type as PaperType | undefined;
+      const type = req.query.type as string | undefined;
       const search = req.query.search as string | undefined;
 
-      let filteredPapers = [...papers];
+      const where: any = {};
 
-      // Filter by type
       if (type) {
-        filteredPapers = filteredPapers.filter((p) => p.paperType === type);
+        where.paperType = type.toUpperCase();
       }
 
-      // Search
       if (search) {
-        const searchLower = search.toLowerCase();
-        filteredPapers = filteredPapers.filter(
-          (p) =>
-            p.title.toLowerCase().includes(searchLower) ||
-            p.titleChinese?.toLowerCase().includes(searchLower) ||
-            p.authors.some((a) => a.name.toLowerCase().includes(searchLower))
-        );
+        where.OR = [
+          { title: { contains: search, mode: 'insensitive' } },
+          { titleChinese: { contains: search, mode: 'insensitive' } },
+          { authors: { some: { name: { contains: search, mode: 'insensitive' } } } },
+        ];
       }
 
-      // Pagination
-      const total = filteredPapers.length;
-      const startIndex = (page - 1) * limit;
-      const paginatedPapers = filteredPapers.slice(startIndex, startIndex + limit);
+      const [papers, total] = await Promise.all([
+        prisma.paper.findMany({
+          where,
+          include: {
+            authors: { orderBy: { order: 'asc' } },
+            journalInfo: true,
+            conferenceInfo: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        prisma.paper.count({ where }),
+      ]);
+
+      const data = papers.map((p) => ({
+        id: p.id,
+        title: p.title,
+        titleChinese: p.titleChinese,
+        authors: p.authors.map((a) => ({
+          id: a.id,
+          name: a.name,
+          affiliation: a.affiliation,
+          department: a.department,
+          isFirst: a.isFirst,
+          isCorresponding: a.isCorresponding,
+          order: a.order,
+        })),
+        paperType: p.paperType.toLowerCase(),
+        journalInfo: p.journalInfo ? {
+          name: p.journalInfo.name,
+          isSci: p.journalInfo.isSci,
+          isSsci: p.journalInfo.isSsci,
+          impactFactor: p.journalInfo.impactFactor,
+          quartile: p.journalInfo.quartile,
+          ranking: p.journalInfo.ranking,
+          totalInField: p.journalInfo.totalInField,
+          category: p.journalInfo.category,
+        } : undefined,
+        conferenceInfo: p.conferenceInfo ? {
+          name: p.conferenceInfo.name,
+          location: p.conferenceInfo.location,
+          date: p.conferenceInfo.date?.toISOString(),
+          type: p.conferenceInfo.type.toLowerCase(),
+          presentationType: p.conferenceInfo.presentationType.toLowerCase(),
+        } : undefined,
+        publicationDate: p.publicationDate?.toISOString().split('T')[0],
+        volume: p.volume,
+        issue: p.issue,
+        pages: p.pages,
+        doi: p.doi,
+        pmid: p.pmid,
+        pdfUrl: p.pdfUrl,
+        createdAt: p.createdAt.toISOString().split('T')[0],
+        updatedAt: p.updatedAt.toISOString().split('T')[0],
+      }));
 
       res.json({
         success: true,
-        data: paginatedPapers,
+        data,
         pagination: {
           page,
           limit,
@@ -95,19 +115,122 @@ router.get(
   }
 );
 
+// Get my papers (papers submitted by the current user)
+router.get(
+  '/my',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const papers = await prisma.paper.findMany({
+        where: { submittedById: req.user!.id },
+        include: {
+          authors: { orderBy: { order: 'asc' } },
+          journalInfo: true,
+          conferenceInfo: true,
+        },
+        orderBy: { publicationDate: 'desc' },
+      });
+
+      const data = papers.map((p) => ({
+        id: p.id,
+        title: p.title,
+        titleChinese: p.titleChinese,
+        authors: p.authors.map((a) => ({
+          id: a.id,
+          name: a.name,
+          affiliation: a.affiliation,
+          department: a.department,
+          isFirst: a.isFirst,
+          isCorresponding: a.isCorresponding,
+          order: a.order,
+        })),
+        paperType: p.paperType.toLowerCase(),
+        journalInfo: p.journalInfo ? {
+          name: p.journalInfo.name,
+          isSci: p.journalInfo.isSci,
+          isSsci: p.journalInfo.isSsci,
+          impactFactor: p.journalInfo.impactFactor,
+          quartile: p.journalInfo.quartile,
+          ranking: p.journalInfo.ranking,
+          totalInField: p.journalInfo.totalInField,
+          category: p.journalInfo.category,
+        } : undefined,
+        conferenceInfo: p.conferenceInfo ? {
+          name: p.conferenceInfo.name,
+          location: p.conferenceInfo.location,
+          date: p.conferenceInfo.date?.toISOString(),
+          type: p.conferenceInfo.type.toLowerCase(),
+          presentationType: p.conferenceInfo.presentationType.toLowerCase(),
+        } : undefined,
+        publicationDate: p.publicationDate?.toISOString().split('T')[0],
+        volume: p.volume,
+        issue: p.issue,
+        pages: p.pages,
+        doi: p.doi,
+        pmid: p.pmid,
+        pdfUrl: p.pdfUrl,
+        createdAt: p.createdAt.toISOString().split('T')[0],
+        updatedAt: p.updatedAt.toISOString().split('T')[0],
+      }));
+
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // Get paper by ID
 router.get(
   '/:id',
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const paper = papers.find((p) => p.id === req.params.id);
+      const paper = await prisma.paper.findUnique({
+        where: { id: req.params.id },
+        include: {
+          authors: { orderBy: { order: 'asc' } },
+          journalInfo: true,
+          conferenceInfo: true,
+        },
+      });
+
       if (!paper) {
         return next(new AppError('Paper not found', 404));
       }
 
       res.json({
         success: true,
-        data: paper,
+        data: {
+          id: paper.id,
+          title: paper.title,
+          titleChinese: paper.titleChinese,
+          authors: paper.authors.map((a) => ({
+            id: a.id,
+            name: a.name,
+            affiliation: a.affiliation,
+            department: a.department,
+            isFirst: a.isFirst,
+            isCorresponding: a.isCorresponding,
+            order: a.order,
+          })),
+          paperType: paper.paperType.toLowerCase(),
+          journalInfo: paper.journalInfo ? {
+            name: paper.journalInfo.name,
+            isSci: paper.journalInfo.isSci,
+            isSsci: paper.journalInfo.isSsci,
+            impactFactor: paper.journalInfo.impactFactor,
+            quartile: paper.journalInfo.quartile,
+          } : undefined,
+          publicationDate: paper.publicationDate?.toISOString().split('T')[0],
+          volume: paper.volume,
+          issue: paper.issue,
+          pages: paper.pages,
+          doi: paper.doi,
+          pmid: paper.pmid,
+          pdfUrl: paper.pdfUrl,
+          createdAt: paper.createdAt.toISOString().split('T')[0],
+          updatedAt: paper.updatedAt.toISOString().split('T')[0],
+        },
       });
     } catch (error) {
       next(error);
@@ -130,18 +253,54 @@ router.post(
         return res.status(400).json({ success: false, errors: errors.array() });
       }
 
-      const newPaper: Paper = {
-        id: (papers.length + 1).toString(),
-        ...req.body,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+      const { title, titleChinese, paperType, publicationDate, volume, issue, pages, doi, authors, journalInfo } = req.body;
 
-      papers.push(newPaper);
+      const paper = await prisma.paper.create({
+        data: {
+          title,
+          titleChinese,
+          paperType: paperType.toUpperCase(),
+          publicationDate: publicationDate ? new Date(publicationDate) : undefined,
+          volume,
+          issue,
+          pages,
+          doi,
+          submittedById: req.user!.id,
+          authors: authors ? {
+            create: authors.map((a: any, idx: number) => ({
+              name: a.name,
+              affiliation: a.affiliation || '奇美醫院',
+              department: a.department,
+              isFirst: idx === 0,
+              isCorresponding: a.isCorresponding || false,
+              order: idx + 1,
+            })),
+          } : undefined,
+          journalInfo: journalInfo ? {
+            create: {
+              name: journalInfo.name,
+              isSci: journalInfo.isSci || false,
+              isSsci: journalInfo.isSsci || false,
+              impactFactor: journalInfo.impactFactor,
+              quartile: journalInfo.quartile?.toUpperCase(),
+            },
+          } : undefined,
+        },
+        include: {
+          authors: { orderBy: { order: 'asc' } },
+          journalInfo: true,
+        },
+      });
 
       res.status(201).json({
         success: true,
-        data: newPaper,
+        data: {
+          id: paper.id,
+          title: paper.title,
+          paperType: paper.paperType.toLowerCase(),
+          createdAt: paper.createdAt.toISOString(),
+          updatedAt: paper.updatedAt.toISOString(),
+        },
       });
     } catch (error) {
       next(error);
@@ -155,20 +314,39 @@ router.put(
   authenticate,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const index = papers.findIndex((p) => p.id === req.params.id);
-      if (index === -1) {
+      const existing = await prisma.paper.findUnique({ where: { id: req.params.id } });
+      if (!existing) {
         return next(new AppError('Paper not found', 404));
       }
 
-      papers[index] = {
-        ...papers[index],
-        ...req.body,
-        updatedAt: new Date().toISOString(),
-      };
+      const { title, titleChinese, paperType, publicationDate, volume, issue, pages, doi } = req.body;
+
+      const paper = await prisma.paper.update({
+        where: { id: req.params.id },
+        data: {
+          ...(title && { title }),
+          ...(titleChinese !== undefined && { titleChinese }),
+          ...(paperType && { paperType: paperType.toUpperCase() }),
+          ...(publicationDate && { publicationDate: new Date(publicationDate) }),
+          ...(volume !== undefined && { volume }),
+          ...(issue !== undefined && { issue }),
+          ...(pages !== undefined && { pages }),
+          ...(doi !== undefined && { doi }),
+        },
+        include: {
+          authors: { orderBy: { order: 'asc' } },
+          journalInfo: true,
+        },
+      });
 
       res.json({
         success: true,
-        data: papers[index],
+        data: {
+          id: paper.id,
+          title: paper.title,
+          paperType: paper.paperType.toLowerCase(),
+          updatedAt: paper.updatedAt.toISOString(),
+        },
       });
     } catch (error) {
       next(error);
@@ -182,12 +360,12 @@ router.delete(
   authenticate,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const index = papers.findIndex((p) => p.id === req.params.id);
-      if (index === -1) {
+      const existing = await prisma.paper.findUnique({ where: { id: req.params.id } });
+      if (!existing) {
         return next(new AppError('Paper not found', 404));
       }
 
-      papers.splice(index, 1);
+      await prisma.paper.delete({ where: { id: req.params.id } });
 
       res.json({
         success: true,

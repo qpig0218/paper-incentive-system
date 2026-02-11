@@ -2,35 +2,9 @@ import { Router, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
-import type { User } from '../types/index.js';
+import prisma from '../lib/prisma.js';
 
 const router = Router();
-
-// Mock users database
-const users: User[] = [
-  {
-    id: '1',
-    email: 'admin@chimei.org.tw',
-    name: '系統管理員',
-    employeeId: 'CM000001',
-    department: '資訊部',
-    position: '管理員',
-    role: 'admin',
-    createdAt: '2024-01-01',
-    updatedAt: '2024-01-01',
-  },
-  {
-    id: '2',
-    email: 'daming.wang@chimei.org.tw',
-    name: '王大明',
-    employeeId: 'CM001234',
-    department: '心臟內科',
-    position: '主治醫師',
-    role: 'user',
-    createdAt: '2024-01-01',
-    updatedAt: '2024-01-01',
-  },
-];
 
 // Get all users (admin only)
 router.get(
@@ -39,17 +13,20 @@ router.get(
   requireAdmin,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
+      const users = await prisma.user.findMany({
+        select: {
+          id: true, email: true, name: true, employeeId: true,
+          department: true, position: true, role: true, createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
       res.json({
         success: true,
         data: users.map((u) => ({
-          id: u.id,
-          email: u.email,
-          name: u.name,
-          employeeId: u.employeeId,
-          department: u.department,
-          position: u.position,
-          role: u.role,
-          createdAt: u.createdAt,
+          ...u,
+          role: u.role.toLowerCase(),
+          createdAt: u.createdAt.toISOString(),
         })),
       });
     } catch (error) {
@@ -64,28 +41,25 @@ router.get(
   authenticate,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      // Only admin can view other users
       if (req.user?.role !== 'admin' && req.user?.id !== req.params.id) {
         return next(new AppError('Access denied', 403));
       }
 
-      const user = users.find((u) => u.id === req.params.id);
+      const user = await prisma.user.findUnique({
+        where: { id: req.params.id },
+        select: {
+          id: true, email: true, name: true, employeeId: true,
+          department: true, position: true, role: true, createdAt: true,
+        },
+      });
+
       if (!user) {
         return next(new AppError('User not found', 404));
       }
 
       res.json({
         success: true,
-        data: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          employeeId: user.employeeId,
-          department: user.department,
-          position: user.position,
-          role: user.role,
-          createdAt: user.createdAt,
-        },
+        data: { ...user, role: user.role.toLowerCase(), createdAt: user.createdAt.toISOString() },
       });
     } catch (error) {
       next(error);
@@ -101,6 +75,7 @@ router.put(
     body('name').optional().isString(),
     body('department').optional().isString(),
     body('position').optional().isString(),
+    body('employeeId').optional().isString(),
   ],
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
@@ -109,37 +84,29 @@ router.put(
         return res.status(400).json({ success: false, errors: errors.array() });
       }
 
-      // Only admin can update other users
       if (req.user?.role !== 'admin' && req.user?.id !== req.params.id) {
         return next(new AppError('Access denied', 403));
       }
 
-      const index = users.findIndex((u) => u.id === req.params.id);
-      if (index === -1) {
-        return next(new AppError('User not found', 404));
-      }
+      const { name, department, position, employeeId } = req.body;
 
-      const { name, department, position } = req.body;
-
-      users[index] = {
-        ...users[index],
-        name: name || users[index].name,
-        department: department || users[index].department,
-        position: position || users[index].position,
-        updatedAt: new Date().toISOString(),
-      };
+      const user = await prisma.user.update({
+        where: { id: req.params.id },
+        data: {
+          ...(name && { name }),
+          ...(department && { department }),
+          ...(position && { position }),
+          ...(employeeId && { employeeId }),
+        },
+        select: {
+          id: true, email: true, name: true, employeeId: true,
+          department: true, position: true, role: true,
+        },
+      });
 
       res.json({
         success: true,
-        data: {
-          id: users[index].id,
-          email: users[index].email,
-          name: users[index].name,
-          employeeId: users[index].employeeId,
-          department: users[index].department,
-          position: users[index].position,
-          role: users[index].role,
-        },
+        data: { ...user, role: user.role.toLowerCase() },
         message: '資料已更新',
       });
     } catch (error) {
@@ -161,20 +128,18 @@ router.put(
         return res.status(400).json({ success: false, errors: errors.array() });
       }
 
-      const index = users.findIndex((u) => u.id === req.params.id);
-      if (index === -1) {
-        return next(new AppError('User not found', 404));
-      }
-
-      users[index] = {
-        ...users[index],
-        role: req.body.role,
-        updatedAt: new Date().toISOString(),
-      };
+      const user = await prisma.user.update({
+        where: { id: req.params.id },
+        data: { role: req.body.role.toUpperCase() },
+        select: {
+          id: true, email: true, name: true, employeeId: true,
+          department: true, position: true, role: true,
+        },
+      });
 
       res.json({
         success: true,
-        data: users[index],
+        data: { ...user, role: user.role.toLowerCase() },
         message: '角色已更新',
       });
     } catch (error) {
@@ -189,21 +154,36 @@ router.get(
   authenticate,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      // Only admin can view other users' stats
       if (req.user?.role !== 'admin' && req.user?.id !== req.params.id) {
         return next(new AppError('Access denied', 403));
       }
 
-      // Mock statistics
+      const [totalPapers, totalApplications, approvedApps, totalRewards] = await Promise.all([
+        prisma.paper.count({ where: { submittedById: req.params.id } }),
+        prisma.paperApplication.count({ where: { applicantId: req.params.id } }),
+        prisma.paperApplication.count({ where: { applicantId: req.params.id, status: 'APPROVED' } }),
+        prisma.paperApplication.aggregate({
+          where: { applicantId: req.params.id, status: 'APPROVED' },
+          _sum: { rewardAmount: true },
+        }),
+      ]);
+
+      const sciPapers = await prisma.paper.count({
+        where: {
+          submittedById: req.params.id,
+          journalInfo: { isSci: true },
+        },
+      });
+
       res.json({
         success: true,
         data: {
-          totalPapers: 15,
-          totalApplications: 12,
-          approvedApplications: 10,
-          totalRewards: 850000,
-          sciPapers: 8,
-          nonSciPapers: 7,
+          totalPapers,
+          totalApplications,
+          approvedApplications: approvedApps,
+          totalRewards: totalRewards._sum.rewardAmount || 0,
+          sciPapers,
+          nonSciPapers: totalPapers - sciPapers,
         },
       });
     } catch (error) {

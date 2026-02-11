@@ -5,11 +5,12 @@ import type {
   Announcement,
   User,
   AIAnalysisResult,
+  ExcelAnalysisResult,
   DashboardStats,
   CareerRecord,
 } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -110,6 +111,11 @@ export const applicationApi = {
     const response = await api.get('/applications/my');
     return response.data;
   },
+
+  delete: async (id: string): Promise<{ success: boolean; message: string; deletedStatus: string }> => {
+    const response = await api.delete(`/applications/${id}`);
+    return response.data;
+  },
 };
 
 // AI APIs
@@ -166,6 +172,31 @@ export const aiApi = {
     const response = await api.post('/ai/calculate-reward', { paperId, authorRole });
     return response.data;
   },
+
+  analyzeExcel: async (file: File): Promise<{ success: boolean; data: ExcelAnalysisResult }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/ai/analyze-excel', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  getExcelData: async (fileId: string, params?: {
+    search?: string;
+    sheetName?: string;
+    columns?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<any> => {
+    const response = await api.get(`/ai/excel-data/${fileId}`, { params });
+    return response.data;
+  },
+
+  askAboutExcel: async (fileId: string, question: string): Promise<{ success: boolean; data: { answer: string } }> => {
+    const response = await api.post('/ai/excel-ask', { fileId, question });
+    return response.data;
+  },
 };
 
 // Announcement APIs
@@ -218,7 +249,7 @@ export const userApi = {
 // Auth APIs
 export const authApi = {
   login: async (credentials: {
-    employeeId: string;
+    email: string;
     password: string;
   }): Promise<{ token: string; user: User }> => {
     const response = await api.post('/auth/login', credentials);

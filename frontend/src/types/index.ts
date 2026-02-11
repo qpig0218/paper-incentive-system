@@ -202,6 +202,28 @@ export interface AIAnalysisResult {
   suggestedReward?: RewardCalculation;
 }
 
+export interface ExcelAnalysisResult {
+  fileId: string;
+  fileName: string;
+  totalSheets: number;
+  totalRows: number;
+  totalCells: number;
+  sheets: {
+    name: string;
+    headers: string[];
+    rowCount: number;
+    columnCount: number;
+    preview: Record<string, any>[];
+  }[];
+  aiAnalysis: {
+    summary: string;
+    insights: string[];
+    dataPatterns: string[];
+    recommendations: string[];
+    keyFindings: string[];
+  };
+}
+
 export interface DashboardStats {
   totalPapers: number;
   pendingApplications: number;

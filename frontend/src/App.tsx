@@ -12,13 +12,15 @@ import Admin from './pages/Admin';
 import Login from './pages/Login';
 
 const App: React.FC = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem('authToken'));
 
   const handleLogin = () => {
     setIsLoggedIn(true);
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user');
     setIsLoggedIn(false);
   };
 

@@ -30,15 +30,22 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
     setIsLoading(true);
 
-    // Simulate login - replace with actual API call
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      
-      if (email && password) {
+      const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await response.json();
+
+      if (data.success && data.data?.token) {
+        localStorage.setItem('authToken', data.data.token);
+        localStorage.setItem('user', JSON.stringify(data.data.user));
         onLogin();
         navigate('/');
       } else {
-        setError('請輸入電子郵件和密碼');
+        setError(data.message || '帳號或密碼錯誤');
       }
     } catch {
       setError('登入失敗，請稍後再試');

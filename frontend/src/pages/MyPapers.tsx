@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus,
@@ -6,102 +6,74 @@ import {
   Download,
 } from 'lucide-react';
 import PaperCard from '../components/PaperCard';
-import type { Paper, PaperApplication, ApplicantType, ApplicationStatus } from '../types';
+import api from '../services/api';
+import type { ApplicationStatus } from '../types';
 
-// Mock data
-const mockPapers: Paper[] = [
-  {
-    id: '1',
-    title: 'Machine Learning Approaches for Early Detection of Heart Failure',
-    titleChinese: '機器學習方法於心臟衰竭早期偵測之系統性回顧',
-    authors: [
-      { id: '1', name: '王大明', affiliation: '奇美醫院', isCorresponding: true, isFirst: true, order: 1 },
-    ],
-    paperType: 'original',
-    journalInfo: {
-      name: 'Journal of Medical Internet Research',
-      isSci: true,
-      isSsci: false,
-      impactFactor: 5.428,
-      quartile: 'Q1',
-    },
-    publicationDate: '2024-03-15',
-    volume: '26',
-    issue: '3',
-    pages: 'e45678',
-    doi: '10.2196/45678',
-    createdAt: '2024-03-15',
-    updatedAt: '2024-03-15',
-  },
-  {
-    id: '2',
-    title: 'A Rare Case of Cardiac Amyloidosis Presenting with Syncope',
-    titleChinese: '以暈厥為表現之罕見心臟澱粉樣變性病例報告',
-    authors: [
-      { id: '1', name: '王大明', affiliation: '奇美醫院', isCorresponding: true, isFirst: true, order: 1 },
-    ],
-    paperType: 'case_report',
-    journalInfo: {
-      name: 'BMC Cardiovascular Disorders',
-      isSci: true,
-      isSsci: false,
-      impactFactor: 2.078,
-      quartile: 'Q3',
-    },
-    publicationDate: '2024-02-20',
-    createdAt: '2024-02-20',
-    updatedAt: '2024-02-20',
-  },
-];
-
-const mockApplications: PaperApplication[] = [
-  {
-    id: 'app1',
-    paperId: '1',
-    applicantId: 'user1',
-    applicantType: 'first_author' as ApplicantType,
-    status: 'approved' as ApplicationStatus,
-    rewardAmount: 85000,
-    submittedAt: '2024-03-20',
-    reviewedAt: '2024-03-25',
-    reviewedBy: 'admin1',
-    createdAt: '2024-03-20',
-    updatedAt: '2024-03-25',
-  },
-  {
-    id: 'app2',
-    paperId: '2',
-    applicantId: 'user1',
-    applicantType: 'first_author' as ApplicantType,
-    status: 'pending' as ApplicationStatus,
-    rewardAmount: 32000,
-    submittedAt: '2024-03-01',
-    createdAt: '2024-03-01',
-    updatedAt: '2024-03-01',
-  },
-];
+interface AppData {
+  id: string;
+  paperId: string;
+  applicantType: string;
+  status: ApplicationStatus;
+  rewardAmount: number | null;
+  submittedAt: string | null;
+  reviewedAt: string | null;
+  reviewComment: string | null;
+  paper?: {
+    id: string;
+    title: string;
+    paperType: string;
+  };
+}
 
 const MyPapers: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [applications, setApplications] = useState<AppData[]>([]);
+  const [papers, setPapers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredApplications = mockApplications.filter((app) => {
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [appsRes, papersRes] = await Promise.all([
+          api.get('/applications/my'),
+          api.get('/papers?limit=100'),
+        ]);
+        if (appsRes.data.success) setApplications(appsRes.data.data);
+        if (papersRes.data.success) setPapers(papersRes.data.data);
+      } catch (err) {
+        console.error('Failed to fetch data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const filteredApplications = applications.filter((app) => {
     if (activeTab === 'all') return true;
     return app.status === activeTab;
   });
 
   const stats = {
-    total: mockApplications.length,
-    pending: mockApplications.filter((a) => a.status === 'pending').length,
-    approved: mockApplications.filter((a) => a.status === 'approved').length,
-    totalReward: mockApplications
+    total: applications.length,
+    pending: applications.filter((a) => a.status === 'pending').length,
+    approved: applications.filter((a) => a.status === 'approved').length,
+    totalReward: applications
       .filter((a) => a.status === 'approved')
       .reduce((sum, a) => sum + (a.rewardAmount || 0), 0),
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen py-8 px-4 flex items-center justify-center">
+        <div className="text-slate-500">載入中...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen py-8 px-4">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">我的論文</h1>
@@ -113,7 +85,6 @@ const MyPapers: React.FC = () => {
           </Link>
         </div>
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div className="glass-card p-6">
             <p className="text-sm text-slate-500">總申請數</p>
@@ -135,36 +106,25 @@ const MyPapers: React.FC = () => {
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="glass-card p-2 mb-6">
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('all')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'all'
-                ? 'bg-primary-500 text-white'
-                : 'text-slate-600 hover:bg-slate-100'
-                }`}
-            >
-              全部 ({stats.total})
-            </button>
-            <button
-              onClick={() => setActiveTab('pending')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'pending'
-                ? 'bg-amber-500 text-white'
-                : 'text-slate-600 hover:bg-slate-100'
-                }`}
-            >
-              審核中 ({stats.pending})
-            </button>
-            <button
-              onClick={() => setActiveTab('approved')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'approved'
-                ? 'bg-emerald-500 text-white'
-                : 'text-slate-600 hover:bg-slate-100'
-                }`}
-            >
-              已核准 ({stats.approved})
-            </button>
+            {(['all', 'pending', 'approved'] as const).map((tab) => {
+              const labels: Record<string, string> = { all: '全部', pending: '審核中', approved: '已核准' };
+              const colors: Record<string, string> = { all: 'bg-primary-500', pending: 'bg-amber-500', approved: 'bg-emerald-500' };
+              const count = tab === 'all' ? stats.total : tab === 'pending' ? stats.pending : stats.approved;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === tab
+                    ? `${colors[tab]} text-white`
+                    : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  {labels[tab]} ({count})
+                </button>
+              );
+            })}
             <div className="flex-1" />
             <button className="btn-secondary text-sm flex items-center gap-2">
               <Download className="w-4 h-4" />
@@ -173,27 +133,44 @@ const MyPapers: React.FC = () => {
           </div>
         </div>
 
-        {/* Papers Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredApplications.map((application) => {
-            const paper = mockPapers.find((p) => p.id === application.paperId);
-            if (!paper) return null;
+            const paper = papers.find((p: any) => p.id === application.paperId);
+            if (!paper) {
+              return (
+                <div key={application.id} className="glass-card p-4">
+                  <p className="font-medium text-slate-800">{application.paper?.title || '論文資料載入中...'}</p>
+                  <p className="text-sm text-slate-500 mt-1">類型: {application.paper?.paperType || '-'}</p>
+                  <div className="flex justify-between mt-3">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      application.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                      application.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {application.status === 'approved' ? '已核准' : application.status === 'pending' ? '審核中' : '已退件'}
+                    </span>
+                    {application.rewardAmount && (
+                      <span className="text-primary-600 font-semibold">NT$ {application.rewardAmount.toLocaleString()}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            }
 
             return (
               <PaperCard
                 key={application.id}
                 paper={paper}
                 showReward={true}
-                rewardAmount={application.rewardAmount}
+                rewardAmount={application.rewardAmount || undefined}
                 applicationStatus={application.status}
-                submittedAt={application.submittedAt}
+                submittedAt={application.submittedAt || undefined}
                 onClick={() => console.log('Paper clicked:', paper)}
               />
             );
           })}
         </div>
 
-        {/* Empty State */}
         {filteredApplications.length === 0 && (
           <div className="glass-card p-12 text-center">
             <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">

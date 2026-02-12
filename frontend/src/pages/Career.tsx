@@ -17,7 +17,9 @@ import {
   Trophy,
   Briefcase,
 } from 'lucide-react';
+import { LevelProgress } from '../components/gamification';
 import api from '../services/api';
+import type { UserLevelProgress } from '../types/gamification';
 
 interface PaperData {
   id: string;
@@ -70,6 +72,14 @@ const Career: React.FC = () => {
   const [, setApplications] = useState<AppData[]>([]);
   const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [yearRecords, setYearRecords] = useState<YearRecord[]>([]);
+  const [levelProgress] = useState<UserLevelProgress>({
+    userId: '',
+    currentLevel: { level: 1, title: '新手研究員', titleEn: 'Beginner', minPoints: 0, maxPoints: 99, benefits: [], icon: '🌱', color: 'from-green-400 to-green-500' },
+    nextLevel: { level: 2, title: '初階研究員', titleEn: 'Novice', minPoints: 100, maxPoints: 299, benefits: [], icon: '📖', color: 'from-blue-400 to-blue-500' },
+    totalPoints: 0,
+    pointsToNextLevel: 100,
+    progressPercentage: 0,
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -192,6 +202,11 @@ const Career: React.FC = () => {
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-slate-900">職涯學術歷程</h1>
           <p className="text-slate-600 mt-1">完整記錄您的學術發表成就</p>
+        </div>
+
+        {/* Level Progress */}
+        <div className="mb-8">
+          <LevelProgress levelProgress={levelProgress} compact />
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

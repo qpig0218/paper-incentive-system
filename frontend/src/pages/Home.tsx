@@ -12,6 +12,7 @@ import {
   Search,
   Trophy,
   Zap,
+  Star,
 } from 'lucide-react';
 import Marquee from '../components/Marquee';
 import PaperGallery from '../components/PaperGallery';
@@ -20,7 +21,6 @@ import {
   Leaderboard,
   ChallengeCard,
   StreakTracker,
-  LevelProgress,
 } from '../components/gamification';
 import api from '../services/api';
 import type { Paper, Announcement, DashboardStats } from '../types';
@@ -30,7 +30,6 @@ import type {
   Challenge,
   Streak,
   HospitalStats,
-  UserLevelProgress,
 } from '../types/gamification';
 
 // Paper categories (static UI config)
@@ -41,18 +40,10 @@ const paperCategories = [
   { id: 'special', label: '特色主題', icon: '⭐', color: 'from-amber-500 to-orange-500' },
 ];
 
-// Gamification data (keep as placeholder until gamification API is fully implemented)
-const defaultLevelProgress: UserLevelProgress = {
-  userId: '',
-  currentLevel: { level: 1, title: '新手研究員', titleEn: 'Beginner', minPoints: 0, maxPoints: 99, benefits: [], icon: '🌱', color: 'from-green-400 to-green-500' },
-  nextLevel: { level: 2, title: '初階研究員', titleEn: 'Novice', minPoints: 100, maxPoints: 299, benefits: [], icon: '📖', color: 'from-blue-400 to-blue-500' },
-  totalPoints: 0,
-  pointsToNextLevel: 100,
-  progressPercentage: 0,
-};
-
 const Home: React.FC = () => {
   const [papers, setPapers] = useState<Paper[]>([]);
+  const [showAllPapers, setShowAllPapers] = useState(false);
+  const [totalHighImpact, setTotalHighImpact] = useState(0);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     totalPapers: 0,
@@ -75,47 +66,30 @@ const Home: React.FC = () => {
     departmentContributions: [],
     recentAchievements: [],
   });
-  const [levelProgress] = useState<UserLevelProgress>(defaultLevelProgress);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [papersRes, annRes, appsRes] = await Promise.all([
-          api.get('/papers?limit=6'),
+        const [highImpactRes, annRes, appsRes] = await Promise.all([
+          api.get('/papers/high-impact?limit=6'),
           api.get('/announcements/active'),
           api.get('/applications?limit=1000').catch(() => ({ data: { success: false } })),
         ]);
 
-        if (papersRes.data.success) {
-          setPapers(papersRes.data.data);
-          const totalPapers = papersRes.data.pagination?.total || 0;
-          const sciCount = papersRes.data.data.filter((p: any) => p.journalInfo?.isSci).length;
+        if (highImpactRes.data.success) {
+          setPapers(highImpactRes.data.data);
+          setTotalHighImpact(highImpactRes.data.total || highImpactRes.data.data.length);
 
-          // Build stats from applications
-          let pendingApps = 0;
-          let approvedApps = 0;
-          let totalReward = 0;
-          if (appsRes.data.success && appsRes.data.data) {
-            const apps = appsRes.data.data;
-            pendingApps = apps.filter((a: any) => a.status === 'pending').length;
-            approvedApps = apps.filter((a: any) => a.status === 'approved').length;
-            totalReward = apps
-              .filter((a: any) => a.status === 'approved')
-              .reduce((sum: number, a: any) => sum + (a.rewardAmount || 0), 0);
-          }
-
-          setStats({
-            totalPapers,
-            pendingApplications: pendingApps,
-            approvedThisMonth: approvedApps,
-            totalRewardThisYear: totalReward,
-            sciPaperCount: sciCount,
-            topAuthors: [],
-          });
-
-          // Build leaderboard from paper authors
+          // Build leaderboard from paper applicants
           const authorCounts: Record<string, { name: string; department: string; count: number }> = {};
-          papersRes.data.data.forEach((p: any) => {
+          highImpactRes.data.data.forEach((p: any) => {
+            if (p.applicant) {
+              const key = p.applicant.name;
+              if (!authorCounts[key]) {
+                authorCounts[key] = { name: p.applicant.name, department: p.applicant.department || '', count: 0 };
+              }
+              authorCounts[key].count++;
+            }
             p.authors?.forEach((a: any) => {
               if (!authorCounts[a.name]) {
                 authorCounts[a.name] = { name: a.name, department: a.department || a.affiliation || '', count: 0 };
@@ -134,6 +108,25 @@ const Home: React.FC = () => {
           })));
         }
 
+        // Build stats from applications
+        if (appsRes.data.success && appsRes.data.data) {
+          const apps = appsRes.data.data;
+          const pendingApps = apps.filter((a: any) => a.status === 'pending').length;
+          const approvedApps = apps.filter((a: any) => a.status === 'approved').length;
+          const totalReward = apps
+            .filter((a: any) => a.status === 'approved')
+            .reduce((sum: number, a: any) => sum + (a.rewardAmount || 0), 0);
+
+          setStats({
+            totalPapers: apps.length,
+            pendingApplications: pendingApps,
+            approvedThisMonth: approvedApps,
+            totalRewardThisYear: totalReward,
+            sciPaperCount: highImpactRes.data.total || 0,
+            topAuthors: [],
+          });
+        }
+
         if (annRes.data.success) {
           setAnnouncements(annRes.data.data);
         }
@@ -145,6 +138,28 @@ const Home: React.FC = () => {
     };
     fetchData();
   }, []);
+
+  const handleViewAll = async () => {
+    if (showAllPapers) {
+      // Collapse back to 6
+      try {
+        const res = await api.get('/papers/high-impact?limit=6');
+        if (res.data.success) setPapers(res.data.data);
+      } catch (err) {
+        console.error('Failed to fetch papers:', err);
+      }
+      setShowAllPapers(false);
+    } else {
+      // Fetch all this year's papers
+      try {
+        const res = await api.get('/papers/high-impact?all=true');
+        if (res.data.success) setPapers(res.data.data);
+      } catch (err) {
+        console.error('Failed to fetch papers:', err);
+      }
+      setShowAllPapers(true);
+    }
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -211,16 +226,46 @@ const Home: React.FC = () => {
               </motion.div>
             ))}
           </motion.div>
+        </div>
+      </section>
 
-          {/* Level Progress */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.6 }} className="mb-8">
-            <LevelProgress levelProgress={levelProgress} compact />
-          </motion.div>
+      {/* Leaderboard + Quick Links Section */}
+      <section className="py-6 px-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Leaderboard */}
+            <div className="lg:col-span-2">
+              <Leaderboard entries={leaderboardData} type={leaderboardType} currentUserId="" onTypeChange={setLeaderboardType} showTypeSelector />
+            </div>
+
+            {/* Quick Links */}
+            <div className="glass-card p-4">
+              <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-amber-500" />
+                快速連結
+              </h3>
+              <div className="space-y-2">
+                {[
+                  { to: '/career', icon: '📊', label: '我的職涯歷程' },
+                  { to: '/resources', icon: '📖', label: '研究資源' },
+                  { to: '/ai-insights', icon: '🤖', label: 'AI 分析洞察' },
+                ].map((link) => (
+                  <Link key={link.to} to={link.to} className="flex items-center justify-between p-3 rounded-xl bg-slate-100/80 hover:bg-slate-200/80 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">{link.icon}</span>
+                      <span className="font-medium text-slate-800">{link.label}</span>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-slate-500" />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* Search Section */}
-      <section className="py-8 px-4">
+      <section className="py-6 px-4">
         <div className="max-w-7xl mx-auto">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.7 }} className="glass-card p-6">
             <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -252,71 +297,49 @@ const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* Main Content Grid */}
+      {/* High Impact Papers Section */}
       <section className="py-8 px-4">
         <div className="max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-8">
-              <div>
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                      <FileText className="w-6 h-6 text-primary-500" />
-                      最新發表論文
-                    </h2>
-                    <p className="text-slate-700 mt-1">瀏覽院內同仁最新學術成果</p>
-                  </div>
-                  <Link to="/my-papers" className="text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1">
-                    查看全部<ArrowRight className="w-4 h-4" />
-                  </Link>
-                </div>
-                <PaperGallery papers={papers} isLoading={isLoading} onPaperClick={(paper) => console.log('Paper clicked:', paper)} />
-              </div>
-
-              {challenges.length > 0 && (
-                <div>
-                  <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-                    <Zap className="w-5 h-5 text-amber-500" />
-                    進行中的挑戰
-                  </h2>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    {challenges.map((challenge) => (
-                      <ChallengeCard key={challenge.id} challenge={challenge} onJoin={(id) => console.log('Join challenge:', id)} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <MissionBoard stats={hospitalStats} />
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                <Star className="w-6 h-6 text-amber-500" />
+                高影響因子期刊論文
+              </h2>
+              <p className="text-slate-700 mt-1">瀏覽院內同仁最新優秀學術成果</p>
             </div>
+            <button
+              onClick={handleViewAll}
+              className="text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+            >
+              {showAllPapers ? '收合' : `查看全部 (${totalHighImpact})`}
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+          <PaperGallery papers={papers} isLoading={isLoading} onPaperClick={(paper) => console.log('Paper clicked:', paper)} hideSearchBar />
 
-            <div className="space-y-6">
-              {streaks.length > 0 && <StreakTracker streaks={streaks} compact />}
+          {streaks.length > 0 && (
+            <div className="mt-8">
+              <StreakTracker streaks={streaks} compact />
+            </div>
+          )}
 
-              <Leaderboard entries={leaderboardData} type={leaderboardType} currentUserId="" onTypeChange={setLeaderboardType} showTypeSelector />
-
-              <div className="glass-card p-4">
-                <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
-                  <Trophy className="w-4 h-4 text-amber-500" />
-                  快速連結
-                </h3>
-                <div className="space-y-2">
-                  {[
-                    { to: '/career', icon: '📊', label: '我的職涯歷程' },
-                    { to: '/resources', icon: '📖', label: '研究資源' },
-                    { to: '/ai-insights', icon: '🤖', label: 'AI 分析洞察' },
-                  ].map((link) => (
-                    <Link key={link.to} to={link.to} className="flex items-center justify-between p-3 rounded-xl bg-slate-100/80 hover:bg-slate-200/80 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <span className="text-xl">{link.icon}</span>
-                        <span className="font-medium text-slate-800">{link.label}</span>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-slate-500" />
-                    </Link>
-                  ))}
-                </div>
+          {challenges.length > 0 && (
+            <div className="mt-8">
+              <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <Zap className="w-5 h-5 text-amber-500" />
+                進行中的挑戰
+              </h2>
+              <div className="grid sm:grid-cols-2 gap-4">
+                {challenges.map((challenge) => (
+                  <ChallengeCard key={challenge.id} challenge={challenge} onJoin={(id) => console.log('Join challenge:', id)} />
+                ))}
               </div>
             </div>
+          )}
+
+          <div className="mt-8">
+            <MissionBoard stats={hospitalStats} />
           </div>
         </div>
       </section>

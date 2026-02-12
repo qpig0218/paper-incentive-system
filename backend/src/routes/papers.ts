@@ -115,6 +115,123 @@ router.get(
   }
 );
 
+// Get high-impact papers (IF > 5, within 1 year)
+router.get(
+  '/high-impact',
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 6;
+      const showAll = req.query.all === 'true';
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+      // Find approved applications with papers from the last year
+      const applications = await prisma.paperApplication.findMany({
+        where: {
+          status: 'APPROVED',
+          paper: {
+            publicationDate: { gte: oneYearAgo },
+          },
+        },
+        include: {
+          paper: {
+            include: {
+              authors: { orderBy: { order: 'asc' } },
+              journalInfo: true,
+              conferenceInfo: true,
+            },
+          },
+          applicant: { select: { name: true, department: true } },
+        },
+        orderBy: { paper: { publicationDate: 'desc' } },
+      });
+
+      // Extract IF and filter > 5
+      const highImpact = applications
+        .map((app) => {
+          let impactFactor = app.paper.journalInfo?.impactFactor || 0;
+          if (!impactFactor && app.reviewComment) {
+            const match = app.reviewComment.match(/IF:([\d.]+)/);
+            if (match) impactFactor = parseFloat(match[1]) || 0;
+          }
+          return { app, impactFactor };
+        })
+        .filter(({ impactFactor }) => impactFactor > 5)
+        .sort((a, b) => {
+          const dateA = a.app.paper.publicationDate?.getTime() || 0;
+          const dateB = b.app.paper.publicationDate?.getTime() || 0;
+          return dateB - dateA;
+        });
+
+      const results = showAll ? highImpact : highImpact.slice(0, limit);
+      const totalCount = highImpact.length;
+
+      // Deduplicate by paper ID
+      const seen = new Set<string>();
+      const unique = results.filter(({ app }) => {
+        if (seen.has(app.paper.id)) return false;
+        seen.add(app.paper.id);
+        return true;
+      });
+
+      const data = unique.map(({ app, impactFactor }) => {
+        const p = app.paper;
+        return {
+          id: p.id,
+          title: p.title,
+          titleChinese: p.titleChinese,
+          authors: p.authors.map((a) => ({
+            id: a.id,
+            name: a.name,
+            affiliation: a.affiliation,
+            department: a.department,
+            isFirst: a.isFirst,
+            isCorresponding: a.isCorresponding,
+            order: a.order,
+          })),
+          paperType: p.paperType.toLowerCase(),
+          journalInfo: p.journalInfo
+            ? {
+                name: p.journalInfo.name,
+                isSci: p.journalInfo.isSci,
+                isSsci: p.journalInfo.isSsci,
+                impactFactor: p.journalInfo.impactFactor || impactFactor,
+                quartile: p.journalInfo.quartile,
+                ranking: p.journalInfo.ranking,
+                totalInField: p.journalInfo.totalInField,
+                category: p.journalInfo.category,
+              }
+            : impactFactor > 0
+              ? { name: '', isSci: true, isSsci: false, impactFactor }
+              : undefined,
+          conferenceInfo: p.conferenceInfo
+            ? {
+                name: p.conferenceInfo.name,
+                location: p.conferenceInfo.location,
+                type: p.conferenceInfo.type.toLowerCase(),
+              }
+            : undefined,
+          publicationDate: p.publicationDate?.toISOString().split('T')[0],
+          volume: p.volume,
+          doi: p.doi,
+          applicant: { name: app.applicant.name, department: app.applicant.department },
+          rewardAmount: app.rewardAmount,
+          createdAt: p.createdAt.toISOString().split('T')[0],
+          updatedAt: p.updatedAt.toISOString().split('T')[0],
+        };
+      });
+
+      res.json({
+        success: true,
+        data,
+        total: totalCount,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // Get my papers (papers submitted by the current user)
 router.get(
   '/my',

@@ -17,6 +17,7 @@ interface PaperGalleryProps {
   onPaperClick?: (paper: Paper) => void;
   showRewards?: boolean;
   rewards?: Record<string, number>;
+  hideSearchBar?: boolean;
 }
 
 const paperTypeOptions: { value: PaperType | 'all'; label: string }[] = [
@@ -36,6 +37,7 @@ const PaperGallery: React.FC<PaperGalleryProps> = ({
   onPaperClick,
   showRewards = false,
   rewards = {},
+  hideSearchBar = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<PaperType | 'all'>('all');
@@ -91,149 +93,153 @@ const PaperGallery: React.FC<PaperGalleryProps> = ({
   return (
     <div className="space-y-6">
       {/* Search and Filter Bar */}
-      <div className="glass-card p-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          {/* Search Input */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="搜尋論文標題、作者..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="input-field pl-12"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          {/* Filter Buttons */}
-          <div className="flex items-center gap-2">
-            {/* Type Filter */}
-            <div className="relative">
-              <select
-                value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value as PaperType | 'all')}
-                className="input-field pr-10 appearance-none cursor-pointer"
-              >
-                {paperTypeOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+      {!hideSearchBar && (
+        <div className="glass-card p-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            {/* Search Input */}
+            <div className="flex-1 relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="搜尋論文標題、作者..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input-field pl-12"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
-            {/* More Filters Toggle */}
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`p-3 rounded-xl transition-colors ${
-                showFilters
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-white/80 text-slate-600 hover:bg-white'
-              }`}
-            >
-              <SlidersHorizontal className="w-5 h-5" />
-            </button>
-
-            {/* View Mode Toggle */}
-            <div className="flex items-center bg-white/80 rounded-xl p-1">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-lg transition-colors ${
-                  viewMode === 'grid'
-                    ? 'bg-primary-500 text-white'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Grid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-lg transition-colors ${
-                  viewMode === 'list'
-                    ? 'bg-primary-500 text-white'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Extended Filters */}
-        <AnimatePresence>
-          {showFilters && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden"
-            >
-              <div className="pt-4 mt-4 border-t border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Sort By */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-2">
-                    排序方式
-                  </label>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                    className="input-field"
-                  >
-                    <option value="date">發表日期（新到舊）</option>
-                    <option value="title">標題（A-Z）</option>
-                    <option value="impact">Impact Factor（高到低）</option>
-                  </select>
-                </div>
-
-                {/* Year Filter */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-2">
-                    發表年份
-                  </label>
-                  <select className="input-field">
-                    <option value="">全部年份</option>
-                    {[2024, 2023, 2022, 2021, 2020].map((year) => (
-                      <option key={year} value={year}>
-                        {year}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Journal Type */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-2">
-                    期刊類型
-                  </label>
-                  <select className="input-field">
-                    <option value="">全部</option>
-                    <option value="sci">SCI</option>
-                    <option value="ssci">SSCI</option>
-                    <option value="non_sci">非 SCI</option>
-                  </select>
-                </div>
+            {/* Filter Buttons */}
+            <div className="flex items-center gap-2">
+              {/* Type Filter */}
+              <div className="relative">
+                <select
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value as PaperType | 'all')}
+                  className="input-field pr-10 appearance-none cursor-pointer"
+                >
+                  {paperTypeOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+
+              {/* More Filters Toggle */}
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`p-3 rounded-xl transition-colors ${
+                  showFilters
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-white/80 text-slate-600 hover:bg-white'
+                }`}
+              >
+                <SlidersHorizontal className="w-5 h-5" />
+              </button>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center bg-white/80 rounded-xl p-1">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2 rounded-lg transition-colors ${
+                    viewMode === 'grid'
+                      ? 'bg-primary-500 text-white'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Grid className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-2 rounded-lg transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-primary-500 text-white'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Extended Filters */}
+          <AnimatePresence>
+            {showFilters && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="pt-4 mt-4 border-t border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Sort By */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-2">
+                      排序方式
+                    </label>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                      className="input-field"
+                    >
+                      <option value="date">發表日期（新到舊）</option>
+                      <option value="title">標題（A-Z）</option>
+                      <option value="impact">Impact Factor（高到低）</option>
+                    </select>
+                  </div>
+
+                  {/* Year Filter */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-2">
+                      發表年份
+                    </label>
+                    <select className="input-field">
+                      <option value="">全部年份</option>
+                      {[2024, 2023, 2022, 2021, 2020].map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Journal Type */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-2">
+                      期刊類型
+                    </label>
+                    <select className="input-field">
+                      <option value="">全部</option>
+                      <option value="sci">SCI</option>
+                      <option value="ssci">SSCI</option>
+                      <option value="non_sci">非 SCI</option>
+                    </select>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* Results Count */}
-      <div className="flex items-center justify-between px-2">
-        <p className="text-sm text-slate-600">
-          共 <span className="font-semibold text-slate-800">{filteredPapers.length}</span> 篇論文
-        </p>
-      </div>
+      {!hideSearchBar && (
+        <div className="flex items-center justify-between px-2">
+          <p className="text-sm text-slate-600">
+            共 <span className="font-semibold text-slate-800">{filteredPapers.length}</span> 篇論文
+          </p>
+        </div>
+      )}
 
       {/* Loading State */}
       {isLoading && (

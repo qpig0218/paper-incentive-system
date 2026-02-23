@@ -281,9 +281,10 @@ const Upload: React.FC = () => {
       } else {
         alert('申請送出失敗：' + (appRes.data.message || '請稍後再試'));
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Submit error:', err);
-      alert('送出失敗：' + (err.response?.data?.message || err.message || '請稍後再試'));
+      const e = err as { response?: { data?: { message?: string } }; message?: string };
+      alert('送出失敗：' + (e.response?.data?.message || e.message || '請稍後再試'));
     } finally {
       setSubmitting(false);
     }

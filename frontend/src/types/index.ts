@@ -213,7 +213,7 @@ export interface ExcelAnalysisResult {
     headers: string[];
     rowCount: number;
     columnCount: number;
-    preview: Record<string, any>[];
+    preview: Record<string, unknown>[];
   }[];
   aiAnalysis: {
     summary: string;

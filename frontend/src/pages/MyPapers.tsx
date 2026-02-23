@@ -28,7 +28,7 @@ interface AppData {
 const MyPapers: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [applications, setApplications] = useState<AppData[]>([]);
-  const [papers, setPapers] = useState<any[]>([]);
+  const [papers, setPapers] = useState<{ id: string; title: string; [key: string]: unknown }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -135,7 +135,7 @@ const MyPapers: React.FC = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredApplications.map((application) => {
-            const paper = papers.find((p: any) => p.id === application.paperId);
+            const paper = papers.find((p) => p.id === application.paperId);
             if (!paper) {
               return (
                 <div key={application.id} className="glass-card p-4">

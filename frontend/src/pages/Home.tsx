@@ -82,7 +82,7 @@ const Home: React.FC = () => {
 
           // Build leaderboard from paper applicants
           const authorCounts: Record<string, { name: string; department: string; count: number }> = {};
-          highImpactRes.data.data.forEach((p: any) => {
+          highImpactRes.data.data.forEach((p: Paper & { applicant?: { name: string; department?: string } }) => {
             if (p.applicant) {
               const key = p.applicant.name;
               if (!authorCounts[key]) {
@@ -90,7 +90,7 @@ const Home: React.FC = () => {
               }
               authorCounts[key].count++;
             }
-            p.authors?.forEach((a: any) => {
+            p.authors?.forEach((a: { name: string; department?: string; affiliation?: string }) => {
               if (!authorCounts[a.name]) {
                 authorCounts[a.name] = { name: a.name, department: a.department || a.affiliation || '', count: 0 };
               }
@@ -111,11 +111,11 @@ const Home: React.FC = () => {
         // Build stats from applications
         if (appsRes.data.success && appsRes.data.data) {
           const apps = appsRes.data.data;
-          const pendingApps = apps.filter((a: any) => a.status === 'pending').length;
-          const approvedApps = apps.filter((a: any) => a.status === 'approved').length;
+          const pendingApps = apps.filter((a: { status: string }) => a.status === 'pending').length;
+          const approvedApps = apps.filter((a: { status: string }) => a.status === 'approved').length;
           const totalReward = apps
-            .filter((a: any) => a.status === 'approved')
-            .reduce((sum: number, a: any) => sum + (a.rewardAmount || 0), 0);
+            .filter((a: { status: string }) => a.status === 'approved')
+            .reduce((sum: number, a: { rewardAmount?: number }) => sum + (a.rewardAmount || 0), 0);
 
           setStats({
             totalPapers: apps.length,

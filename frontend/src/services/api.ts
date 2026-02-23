@@ -188,7 +188,7 @@ export const aiApi = {
     columns?: string;
     page?: number;
     limit?: number;
-  }): Promise<any> => {
+  }): Promise<{ success: boolean; data: unknown }> => {
     const response = await api.get(`/ai/excel-data/${fileId}`, { params });
     return response.data;
   },

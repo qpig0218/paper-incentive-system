@@ -59,7 +59,6 @@ const PaperCard: React.FC<PaperCardProps> = ({
   showReward = false,
   rewardAmount,
   applicationStatus,
-  submittedAt: _submittedAt,
 }) => {
   const getPaperTypeInfo = (type: PaperType) => {
     const types: Record<PaperType, { label: string; icon: React.ElementType; color: string }> = {

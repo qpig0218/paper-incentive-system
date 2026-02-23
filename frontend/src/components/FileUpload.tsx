@@ -39,7 +39,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const onDrop = useCallback(
-    (acceptedFiles: File[], rejectedFiles: any[]) => {
+    (acceptedFiles: File[], rejectedFiles: { errors: { code: string }[] }[]) => {
       setError(null);
 
       if (rejectedFiles.length > 0) {
@@ -64,7 +64,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
         setPreviewUrl(url);
       }
     },
-    [onFileSelect, maxSize]
+    [onFileSelect, maxSize, formatLabel]
   );
 
   const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({

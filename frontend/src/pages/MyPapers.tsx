@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import PaperCard from '../components/PaperCard';
 import api from '../services/api';
-import type { ApplicationStatus } from '../types';
+import type { ApplicationStatus, Paper } from '../types';
 
 interface AppData {
   id: string;
@@ -28,7 +28,7 @@ interface AppData {
 const MyPapers: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [applications, setApplications] = useState<AppData[]>([]);
-  const [papers, setPapers] = useState<{ id: string; title: string; [key: string]: unknown }[]>([]);
+  const [papers, setPapers] = useState<Paper[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

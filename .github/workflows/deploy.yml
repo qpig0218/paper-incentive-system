@@ -73,13 +73,6 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Configure App Service settings
-        run: |
-          az webapp config appsettings set \
-            --name ${{ env.AZURE_WEBAPP_NAME }} \
-            --resource-group ChimeiAzureDB \
-            --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false
-
       - name: Deploy to Azure App Service
         run: |
           az webapp deploy \
@@ -88,10 +81,3 @@ jobs:
             --src-path deploy.zip \
             --type zip \
             --async true
-
-      - name: Set startup command
-        run: |
-          az webapp config set \
-            --name ${{ env.AZURE_WEBAPP_NAME }} \
-            --resource-group ChimeiAzureDB \
-            --startup-file "npx prisma migrate deploy && node dist/index.js"
